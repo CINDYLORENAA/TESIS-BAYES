@@ -1,3 +1,4 @@
+---
 title: "ANALISIS"
 author: "Lorena Albarracin Avila"
 date: "9/9/2022"
@@ -20,6 +21,8 @@ library(dplyr)
 library(lubridate)# fechas
 require(reshape)
 library(geoR)
+library(knitr)
+
 
 
 
@@ -56,7 +59,7 @@ basecovid$mes <- as.numeric(format(basecovid$`Fecha de diagnóstico`,"%m"))
 
 
 ```{r}
-table(basecovid$año)
+#table(basecovid$año)
 
 ```
 
@@ -74,6 +77,8 @@ basecovid$ind <- ifelse(is.element(basecovid$`Código DIVIPOLA municipio`, c(270
 basecovidfinal<-basecovid   %>% 
      filter(ind %in% c(1)) 
 
+rm(basecovid)
+
 
 
 ```
@@ -82,13 +87,13 @@ Codigos de municipios a excluir
 
 ```{r}
 
-# Por ser areas no municipalizadas, San Andres, Providencia y Barrancominas. 
-excluidos<- c(27086,94663,88001,88564,91263,91405,91407,91430,91460,91530,91536,91669,91798,94343,94883,94884,94885,94886,94887,94888,97511,97777,97889)
+### Por ser areas no municipalizadas, San Andres, Providencia y Barrancominas. 
+#excluidos<- c(27086,94663,88001,88564,91263,91405,91407,91430,91460,91530,91536,91669,91798,94343,94883,94884,94885,94886,94887,94888,97511,97777,97889)
 
 
-# Munipios que no cuentan con informacion de prevalencias e IPM 
+### Munipios que no cuentan con informacion de prevalencias e IPM 
 
-excluidos_2<-c (88001,88564,91263,91405,91407,91430,91460,91530,91536,91669,91798,94343,94883,94884,94885,94886,94887,94888,97511,97777,97889,8638,15106,15131,15368,15401,18860,19050,19100,19290,19473,19517,19701,23079,23678,25258,25312,25402,25483,25658,27615,41319,41530,41676,44035,44874,47205,47675,50313,50318,50590,50689,52083,52215,52260,52399,52473,52480,52612,52685,52693,54673,54820,63001,63111,63212,66075,66687,68020,68077,68092,68101,68121,68176,68207,68250,68320,68615,68669,68705,68773,68872,70110,70400,70717,70771,73678,73770,73873,76054,76100,76130,76400,76403,76606,76670,85300,85440,86755,86760,94663,95015,95200)
+#excluidos_2<-c (88001,88564,91263,91405,91407,91430,91460,91530,91536,91669,91798,94343,94883,94884,94885,94886,94887,94888,97511,97777,97889,8638,15106,15131,15368,15401,18860,19050,19100,19290,19473,19517,19701,23079,23678,25258,25312,25402,25483,25658,27615,41319,41530,41676,44035,44874,47205,47675,50313,50318,50590,50689,52083,52215,52260,52399,52473,52480,52612,52685,52693,54673,54820,63001,63111,63212,66075,66687,68020,68077,68092,68101,68121,68176,68207,68250,68320,68615,68669,68705,68773,68872,70110,70400,70717,70771,73678,73770,73873,76054,76100,76130,76400,76403,76606,76670,85300,85440,86755,86760,94663,95015,95200)
 ```
 
 
@@ -100,8 +105,6 @@ excluidos_2<-c (88001,88564,91263,91405,91407,91430,91460,91530,91536,91669,9179
 ```{r}
 casos_mun<-as.data.frame(table(basecovidfinal$`Código DIVIPOLA municipio`))
 casos_mun = rename(casos_mun, c(Freq="Total_casos"))
-
-
 ```
 
 Tablas de municipios 
@@ -110,73 +113,14 @@ Tablas de municipios
 ```{r}
 
 MUN_COL<-merge(MUN_COL,casos_mun, by.x="COD_MUN", by.y="Var1")  
-MUN_COL$Tasa_incidencia_x100.000<-MUN_COL$Total_casos/MUN_COL$POB_Total*100000
+rm(casos_mun)
 
-#variables de prevalencia ENF  trabajaria con 1019 municipios
-
-MUN_COL_PREV<-left_join(MUN_COL,BASE_COV19_IPM, by="COD_MUN") 
-
-
-
-
-#  primeros municipios con mayor tasa  de incidencia
-MUN_ORG<-MUN_COL_PREV %>% arrange(desc(Tasa_incidencia_x100.000)) %>% slice(1:1200)
-
-
-
-```
-
-
-
-Analisis de casos de COVID 19
-
-
-
-casos por mes y municipio para el año 2020
-
-```{r}
-datos2020<-basecovidfinal   %>% 
-     filter(año %in% c("2020")) %>% group_by(`Código DIVIPOLA municipio`) %>% 
-    count(mes)
-
-```
-
-casos por mes y municipio para el año 2021
-
-```{r}
-datos2021<-basecovidfinal   %>% 
-     filter(año %in% c("2021")) %>% group_by(`Código DIVIPOLA municipio`) %>% 
-    count(mes)
-```
-
-##################################################################################################################
-
-
-
-#BASE DE DATOS DE MUNICIPIOS 
-
-#numero de casos por municipio
-
-```{r}
-casos_mun<-as.data.frame(table(basecovidfinal$`Código DIVIPOLA municipio`))
-casos_mun = rename(casos_mun, c(Freq="Total_casos"))
-
-
-```
-
-Tablas de municipios 
-
-
-
-```{r}
-
-MUN_COL<-merge(MUN_COL,casos_mun, by.x="COD_MUN", by.y="Var1")  
-MUN_COL$Tasa_incidencia_x100.000<-MUN_COL$Total_casos/MUN_COL$POB_Total*100000
-
-#variables de prevalencia ENF  trabajaria con 1019 municipios
+#variables de prevalencia ENF   ( disponible para 1019 municipios)
 
 MUN_COL_PREV<-left_join(MUN_COL,BASE_COV19_IPM, by="COD_MUN") 
 
+rm(MUN_COL)
+rm (BASE_COV19_IPM)
 ```
 
 
@@ -194,51 +138,76 @@ Edad<- basecovidfinal %>% select(`Código DIVIPOLA municipio`,Edad_años ) %>% g
 
 MUN_COL_PREV<-merge (MUN_COL_PREV,Edad, by.x="COD_MUN", by.y="Código DIVIPOLA municipio") 
 
+rm(Edad)
+
 ```
 
 
 
 Distribucion de casos por sexo por municpio 
 ```{r}
-Sexo <- basecovidfinal %>% select(`Código DIVIPOLA municipio`,Sexo ) %>% group_by(Sexo)
+Sexo <- basecovidfinal %>% select(`Código DIVIPOLA municipio`,Sexo ) %>% group_by(`Código DIVIPOLA municipio`)
 
 Sexo$Femenino <- (if_else(condition = Sexo$Sexo== "F", true = 1, false = 0))
 
-table(Sexo$Femenino)
 
 Sexo_mun<- Sexo %>% select(`Código DIVIPOLA municipio`, Femenino ) %>% group_by(`Código DIVIPOLA municipio`)%>% summarise(Proporcion_Mujeres  = mean(Femenino))
 
 MUN_COL_PREV<-merge (MUN_COL_PREV,Sexo_mun, by.x="COD_MUN", by.y="Código DIVIPOLA municipio") 
 
+rm(Sexo)
+rm(Sexo_mun)
+
 ```
 
 
+Mortalidad por Municipio 
 
 ```{r}
-cond_final <- basecovidfinal %>% select(`Código DIVIPOLA municipio`, Recuperado) %>% group_by(Recuperado)
-
-cond_final$muerto <- (if_else(condition = cond_final$Recuperado == "Fallecido", true = 1, false = if_else(condition = cond_final$Recuperado == "fallecido",
-                                            true = 1,
-                                            false = 0)))
+cond_final <- basecovidfinal %>% select(`Código DIVIPOLA municipio`, Recuperado) %>% group_by(`Código DIVIPOLA municipio`)
 
 
-cond_final_mun<- cond_final %>% group_by(`Código DIVIPOLA municipio`)%>% summarise(Muertos  = count(muerto))
+cond_final[cond_final=="fallecido"] <- "Fallecido"
 
 
-sum(cond_final_mun$Muertos)
+cond_final$muerto <- (if_else(condition = cond_final$Recuperado == "Fallecido", true = 1, false = 0))
+
+cond_final$recuperado <- (if_else(condition = cond_final$Recuperado == "Recuperado", true = 1, false = 0))
+
+cond_final_mun<- cond_final %>% group_by(`Código DIVIPOLA municipio`)%>% summarise(Num_muertos  = sum(muerto))
+
+
+cond_final_den<- cond_final %>% group_by(`Código DIVIPOLA municipio`)%>% summarise(Num_recup  = sum(recuperado))
+
+cond_final_den$total<-cond_final_mun$Num_muertos+cond_final_den$Num_recup
+  
+MUN_COL_PREV<-merge (MUN_COL_PREV,cond_final_mun, by.x="COD_MUN", by.y="Código DIVIPOLA municipio") 
+
+rm(cond_final)
+rm(cond_final_mun)
+
+##Tasa incidencia (NUM CASOS/ total poblacion  )
+
+MUN_COL_PREV$Tasa_incidencia_x100.000<-MUN_COL_PREV$Total_casos/MUN_COL_PREV$POB_Total*100000
+
+##Tasa mortalidad (muertos/ total poblacion  )
+
+MUN_COL_PREV$Tasa_mortalidad_x100.000<-MUN_COL_PREV$Num_muertos/MUN_COL_PREV$POB_Total_2020*100000
+
+##Tasa Letalidad (muertos/ recuperados -muertos )
+
+MUN_COL_PREV$Tasa_letalidad_x100.000<-MUN_COL_PREV$Num_muertos/cond_final_den$total*100000
+
+rm(cond_final_den)
 
 ```
-
 
 
 #  primeros municipios con mayor tasa  de incidencia
 
 ```{r}
 
-
 MUN_ORG<-MUN_COL_PREV %>% arrange(desc(Tasa_incidencia_x100.000)) %>% slice(1:1200)
-
-
 
 ```
 
@@ -262,134 +231,3 @@ datos2021<-basecovidfinal   %>%
      filter(año %in% c("2021")) %>% group_by(`Código DIVIPOLA municipio`) %>% 
     count(mes)
 ```
-
-
-
-
-
-
-################################################################################
-
-
-
-#BASE DE DATOS DE MUNICIPIOS 
-
-#numero de casos por municipio
-
-```{r}
-casos_mun<-as.data.frame(table(basecovidfinal$`Código DIVIPOLA municipio`))
-casos_mun = rename(casos_mun, c(Freq="Total_casos"))
-
-
-```
-
-Tablas de municipios 
-
-
-
-```{r}
-
-MUN_COL<-merge(MUN_COL,casos_mun, by.x="COD_MUN", by.y="Var1")  
-MUN_COL$Tasa_incidencia_x100.000<-MUN_COL$Total_casos/MUN_COL$POB_Total*100000
-
-#variables de prevalencia ENF  trabajaria con 1019 municipios
-
-MUN_COL_PREV<-left_join(MUN_COL,BASE_COV19_IPM, by="COD_MUN") 
-
-```
-
-
-Distribucion de casos por Promedio de edad por municipio 
-
-```{r}
-
-basecovidfinal$Edad_años <- round(if_else(condition = basecovidfinal$`Unidad de medida de edad` == 2,
-                            true = basecovidfinal$Edad/12,
-                            false = if_else(condition = basecovidfinal$`Unidad de medida de edad` == 3,
-                                            true = basecovidfinal$Edad/365,
-                                            false = basecovidfinal$Edad)),4)
-
-Edad<- basecovidfinal %>% select(`Código DIVIPOLA municipio`,Edad_años ) %>% group_by(`Código DIVIPOLA municipio`)%>% summarise(Promedio_Edad_años = mean(Edad_años))
-
-MUN_COL_PREV<-merge (MUN_COL_PREV,Edad, by.x="COD_MUN", by.y="Código DIVIPOLA municipio") 
-
-```
-
-
-
-Distribucion de casos por sexo por municpio 
-```{r}
-Sexo <- basecovidfinal %>% select(`Código DIVIPOLA municipio`,Sexo ) %>% group_by(Sexo)
-
-Sexo$Femenino <- (if_else(condition = Sexo$Sexo== "F", true = 1, false = 0))
-
-table(Sexo$Femenino)
-
-Sexo_mun<- Sexo %>% select(`Código DIVIPOLA municipio`, Femenino ) %>% group_by(`Código DIVIPOLA municipio`)%>% summarise(Proporcion_Mujeres  = mean(Femenino))
-
-MUN_COL_PREV<-merge (MUN_COL_PREV,Sexo_mun, by.x="COD_MUN", by.y="Código DIVIPOLA municipio") 
-
-```
-
-
-
-```{r}
-cond_final <- basecovidfinal %>% select(`Código DIVIPOLA municipio`, Recuperado) %>% group_by(Recuperado)
-
-cond_final$muerto <- (if_else(condition = cond_final$Recuperado == "Fallecido", true = 1, false = if_else(condition = cond_final$Recuperado == "fallecido",
-                                            true = 1,
-                                            false = 0)))
-
-
-cond_final_mun<- cond_final %>% group_by(`Código DIVIPOLA municipio`)%>% summarise(Muertos  = count(muerto))
-
-
-sum(cond_final_mun$Muertos)
-
-```
-
-
-
-#  primeros municipios con mayor tasa  de incidencia
-
-```{r}
-
-
-MUN_ORG<-MUN_COL_PREV %>% arrange(desc(Tasa_incidencia_x100.000)) %>% slice(1:1200)
-
-
-
-```
-
-Analisis de casos de COVID 19
-
-
-
-casos por mes y municipio para el año 2020
-
-```{r}
-datos2020<-basecovidfinal   %>% 
-     filter(año %in% c("2020")) %>% group_by(`Código DIVIPOLA municipio`) %>% 
-    count(mes)
-
-```
-
-casos por mes y municipio para el año 2021
-
-```{r}
-datos2021<-basecovidfinal   %>% 
-     filter(año %in% c("2021")) %>% group_by(`Código DIVIPOLA municipio`) %>% 
-    count(mes)
-```
-
-
-
-
-
-
-
-
-
-
-
-
