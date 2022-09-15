@@ -149,6 +149,244 @@ datos2021<-basecovidfinal   %>%
     count(mes)
 ```
 
+##################################################################################################################
+
+
+
+#BASE DE DATOS DE MUNICIPIOS 
+
+#numero de casos por municipio
+
+```{r}
+casos_mun<-as.data.frame(table(basecovidfinal$`Código DIVIPOLA municipio`))
+casos_mun = rename(casos_mun, c(Freq="Total_casos"))
+
+
+```
+
+Tablas de municipios 
+
+
+
+```{r}
+
+MUN_COL<-merge(MUN_COL,casos_mun, by.x="COD_MUN", by.y="Var1")  
+MUN_COL$Tasa_incidencia_x100.000<-MUN_COL$Total_casos/MUN_COL$POB_Total*100000
+
+#variables de prevalencia ENF  trabajaria con 1019 municipios
+
+MUN_COL_PREV<-left_join(MUN_COL,BASE_COV19_IPM, by="COD_MUN") 
+
+```
+
+
+Distribucion de casos por Promedio de edad por municipio 
+
+```{r}
+
+basecovidfinal$Edad_años <- round(if_else(condition = basecovidfinal$`Unidad de medida de edad` == 2,
+                            true = basecovidfinal$Edad/12,
+                            false = if_else(condition = basecovidfinal$`Unidad de medida de edad` == 3,
+                                            true = basecovidfinal$Edad/365,
+                                            false = basecovidfinal$Edad)),4)
+
+Edad<- basecovidfinal %>% select(`Código DIVIPOLA municipio`,Edad_años ) %>% group_by(`Código DIVIPOLA municipio`)%>% summarise(Promedio_Edad_años = mean(Edad_años))
+
+MUN_COL_PREV<-merge (MUN_COL_PREV,Edad, by.x="COD_MUN", by.y="Código DIVIPOLA municipio") 
+
+```
+
+
+
+Distribucion de casos por sexo por municpio 
+```{r}
+Sexo <- basecovidfinal %>% select(`Código DIVIPOLA municipio`,Sexo ) %>% group_by(Sexo)
+
+Sexo$Femenino <- (if_else(condition = Sexo$Sexo== "F", true = 1, false = 0))
+
+table(Sexo$Femenino)
+
+Sexo_mun<- Sexo %>% select(`Código DIVIPOLA municipio`, Femenino ) %>% group_by(`Código DIVIPOLA municipio`)%>% summarise(Proporcion_Mujeres  = mean(Femenino))
+
+MUN_COL_PREV<-merge (MUN_COL_PREV,Sexo_mun, by.x="COD_MUN", by.y="Código DIVIPOLA municipio") 
+
+```
+
+
+
+```{r}
+cond_final <- basecovidfinal %>% select(`Código DIVIPOLA municipio`, Recuperado) %>% group_by(Recuperado)
+
+cond_final$muerto <- (if_else(condition = cond_final$Recuperado == "Fallecido", true = 1, false = if_else(condition = cond_final$Recuperado == "fallecido",
+                                            true = 1,
+                                            false = 0)))
+
+
+cond_final_mun<- cond_final %>% group_by(`Código DIVIPOLA municipio`)%>% summarise(Muertos  = count(muerto))
+
+
+sum(cond_final_mun$Muertos)
+
+```
+
+
+
+#  primeros municipios con mayor tasa  de incidencia
+
+```{r}
+
+
+MUN_ORG<-MUN_COL_PREV %>% arrange(desc(Tasa_incidencia_x100.000)) %>% slice(1:1200)
+
+
+
+```
+
+Analisis de casos de COVID 19
+
+
+
+casos por mes y municipio para el año 2020
+
+```{r}
+datos2020<-basecovidfinal   %>% 
+     filter(año %in% c("2020")) %>% group_by(`Código DIVIPOLA municipio`) %>% 
+    count(mes)
+
+```
+
+casos por mes y municipio para el año 2021
+
+```{r}
+datos2021<-basecovidfinal   %>% 
+     filter(año %in% c("2021")) %>% group_by(`Código DIVIPOLA municipio`) %>% 
+    count(mes)
+```
+
+
+
+
+
+
+################################################################################
+
+
+
+#BASE DE DATOS DE MUNICIPIOS 
+
+#numero de casos por municipio
+
+```{r}
+casos_mun<-as.data.frame(table(basecovidfinal$`Código DIVIPOLA municipio`))
+casos_mun = rename(casos_mun, c(Freq="Total_casos"))
+
+
+```
+
+Tablas de municipios 
+
+
+
+```{r}
+
+MUN_COL<-merge(MUN_COL,casos_mun, by.x="COD_MUN", by.y="Var1")  
+MUN_COL$Tasa_incidencia_x100.000<-MUN_COL$Total_casos/MUN_COL$POB_Total*100000
+
+#variables de prevalencia ENF  trabajaria con 1019 municipios
+
+MUN_COL_PREV<-left_join(MUN_COL,BASE_COV19_IPM, by="COD_MUN") 
+
+```
+
+
+Distribucion de casos por Promedio de edad por municipio 
+
+```{r}
+
+basecovidfinal$Edad_años <- round(if_else(condition = basecovidfinal$`Unidad de medida de edad` == 2,
+                            true = basecovidfinal$Edad/12,
+                            false = if_else(condition = basecovidfinal$`Unidad de medida de edad` == 3,
+                                            true = basecovidfinal$Edad/365,
+                                            false = basecovidfinal$Edad)),4)
+
+Edad<- basecovidfinal %>% select(`Código DIVIPOLA municipio`,Edad_años ) %>% group_by(`Código DIVIPOLA municipio`)%>% summarise(Promedio_Edad_años = mean(Edad_años))
+
+MUN_COL_PREV<-merge (MUN_COL_PREV,Edad, by.x="COD_MUN", by.y="Código DIVIPOLA municipio") 
+
+```
+
+
+
+Distribucion de casos por sexo por municpio 
+```{r}
+Sexo <- basecovidfinal %>% select(`Código DIVIPOLA municipio`,Sexo ) %>% group_by(Sexo)
+
+Sexo$Femenino <- (if_else(condition = Sexo$Sexo== "F", true = 1, false = 0))
+
+table(Sexo$Femenino)
+
+Sexo_mun<- Sexo %>% select(`Código DIVIPOLA municipio`, Femenino ) %>% group_by(`Código DIVIPOLA municipio`)%>% summarise(Proporcion_Mujeres  = mean(Femenino))
+
+MUN_COL_PREV<-merge (MUN_COL_PREV,Sexo_mun, by.x="COD_MUN", by.y="Código DIVIPOLA municipio") 
+
+```
+
+
+
+```{r}
+cond_final <- basecovidfinal %>% select(`Código DIVIPOLA municipio`, Recuperado) %>% group_by(Recuperado)
+
+cond_final$muerto <- (if_else(condition = cond_final$Recuperado == "Fallecido", true = 1, false = if_else(condition = cond_final$Recuperado == "fallecido",
+                                            true = 1,
+                                            false = 0)))
+
+
+cond_final_mun<- cond_final %>% group_by(`Código DIVIPOLA municipio`)%>% summarise(Muertos  = count(muerto))
+
+
+sum(cond_final_mun$Muertos)
+
+```
+
+
+
+#  primeros municipios con mayor tasa  de incidencia
+
+```{r}
+
+
+MUN_ORG<-MUN_COL_PREV %>% arrange(desc(Tasa_incidencia_x100.000)) %>% slice(1:1200)
+
+
+
+```
+
+Analisis de casos de COVID 19
+
+
+
+casos por mes y municipio para el año 2020
+
+```{r}
+datos2020<-basecovidfinal   %>% 
+     filter(año %in% c("2020")) %>% group_by(`Código DIVIPOLA municipio`) %>% 
+    count(mes)
+
+```
+
+casos por mes y municipio para el año 2021
+
+```{r}
+datos2021<-basecovidfinal   %>% 
+     filter(año %in% c("2021")) %>% group_by(`Código DIVIPOLA municipio`) %>% 
+    count(mes)
+```
+
+
+
+
+
+
 
 
 
