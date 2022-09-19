@@ -22,7 +22,8 @@ library(lubridate)# fechas
 require(reshape)
 library(geoR)
 library(knitr)
-
+library(incidence)
+library(binom)
 
 
 
@@ -79,6 +80,8 @@ basecovidfinal<-basecovid   %>%
 
 rm(basecovid)
 
+basecovidfinal$Sexo[basecovidfinal$Sexo =="f"] <- "F"
+basecovidfinal$Sexo[basecovidfinal$Sexo =="m"] <- "M"
 
 
 ```
@@ -161,7 +164,7 @@ rm(Sexo_mun)
 ```
 
 
-Mortalidad por Municipio 
+Tasas: incidencia, mortalidad, letalidad  por Municipio 
 
 ```{r}
 cond_final <- basecovidfinal %>% select(`Código DIVIPOLA municipio`, Recuperado) %>% group_by(`Código DIVIPOLA municipio`)
@@ -188,15 +191,15 @@ rm(cond_final_mun)
 
 ##Tasa incidencia (NUM CASOS/ total poblacion  )
 
-MUN_COL_PREV$Tasa_incidencia_x100.000<-MUN_COL_PREV$Total_casos/MUN_COL_PREV$POB_Total*100000
+MUN_COL_PREV$Tasa_incidencia_x10.000<-MUN_COL_PREV$Total_casos/MUN_COL_PREV$POB_Total*10000
 
 ##Tasa mortalidad (muertos/ total poblacion  )
 
-MUN_COL_PREV$Tasa_mortalidad_x100.000<-MUN_COL_PREV$Num_muertos/MUN_COL_PREV$POB_Total_2020*100000
+MUN_COL_PREV$Tasa_mortalidad_x10.000<-MUN_COL_PREV$Num_muertos/MUN_COL_PREV$POB_Total_2020*10000
 
 ##Tasa Letalidad (muertos/ recuperados -muertos )
 
-MUN_COL_PREV$Tasa_letalidad_x100.000<-MUN_COL_PREV$Num_muertos/cond_final_den$total*100000
+MUN_COL_PREV$Tasa_letalidad_x10.000<-MUN_COL_PREV$Num_muertos/cond_final_den$total*10000
 
 rm(cond_final_den)
 
@@ -207,13 +210,11 @@ rm(cond_final_den)
 
 ```{r}
 
-MUN_ORG<-MUN_COL_PREV %>% arrange(desc(Tasa_incidencia_x100.000)) %>% slice(1:1200)
+MUN_COL_PREV<-MUN_COL_PREV %>% arrange(desc(Tasa_incidencia_x100.000))
 
 ```
 
-Analisis de casos de COVID 19
-
-
+## Analisis de casos de COVID 19
 
 casos por mes y municipio para el año 2020
 
@@ -230,4 +231,49 @@ casos por mes y municipio para el año 2021
 datos2021<-basecovidfinal   %>% 
      filter(año %in% c("2021")) %>% group_by(`Código DIVIPOLA municipio`) %>% 
     count(mes)
+```
+
+Analisis General
+
+```{r}
+n_dead <- sum(MUN_COL_PREV$Num_muertos)
+n_known_outcome <- sum(cond_final_den$total)
+cfr <- n_dead / n_known_outcome *100
+
+cfr_with_CI <- binom.confint(n_dead, n_known_outcome, method = "exact")
+
+rm(cond_final_den)
+rm (cfr_with_CI)
+
+```
+
+
+```{r}
+#creo un dataset con :municipio, fechas, casos , muertes¿?
+# incluyo lo registrado en vacunacion en PAIWEB el rezago aun no esta ??
+
+
+
+```
+
+
+```{r}
+install.packages ( "incidencia" )
+library(incidence)
+
+
+dat  <-  basecovidfinal $`Fecha de diagnóstico`
+
+
+i.7  <-  incidence ( dat , interval  =  31 )
+ i.7 
+ 
+ plot ( i.7 )
+
+i.7.sexo  <-  incidence ( dat , interval =  "month" , groups =   basecovidfinal$Sexo )
+ i.7.sexo 
+ 
+ 
+ plot(i.7.sexo, stack = TRUE, border = "grey")
+
 ```
