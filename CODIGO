@@ -24,6 +24,15 @@ library(geoR)
 library(knitr)
 library(incidence)
 library(binom)
+library(incidence)
+
+library(tmap)
+library(sf)
+library(ggmap)
+library(rgdal)
+library(rgeos)
+library(maptools)
+
 
 
 
@@ -201,7 +210,8 @@ MUN_COL_PREV$Tasa_mortalidad_x10.000<-MUN_COL_PREV$Num_muertos/MUN_COL_PREV$POB_
 
 MUN_COL_PREV$Tasa_letalidad_x10.000<-MUN_COL_PREV$Num_muertos/cond_final_den$total*10000
 
-rm(cond_final_den)
+
+
 
 ```
 
@@ -210,30 +220,22 @@ rm(cond_final_den)
 
 ```{r}
 
-MUN_COL_PREV<-MUN_COL_PREV %>% arrange(desc(Tasa_incidencia_x100.000))
+MUN_COL_PREV<-MUN_COL_PREV %>% arrange(desc(Tasa_incidencia_x10.000))
 
 ```
 
 ## Analisis de casos de COVID 19
 
-casos por mes y municipio para el año 2020
+casos por mes y municipio para el año 2020-2021
 
 ```{r}
-datos2020<-basecovidfinal   %>% 
-     filter(año %in% c("2020")) %>% group_by(`Código DIVIPOLA municipio`) %>% 
-    count(mes)
+datosmun<-basecovidfinal %>% group_by(`Código DIVIPOLA municipio`, año) %>% count(mes)
 
-```
-
-casos por mes y municipio para el año 2021
-
-```{r}
-datos2021<-basecovidfinal   %>% 
-     filter(año %in% c("2021")) %>% group_by(`Código DIVIPOLA municipio`) %>% 
-    count(mes)
 ```
 
 Analisis General
+
+tasa de letalidad general 
 
 ```{r}
 n_dead <- sum(MUN_COL_PREV$Num_muertos)
@@ -242,38 +244,228 @@ cfr <- n_dead / n_known_outcome *100
 
 cfr_with_CI <- binom.confint(n_dead, n_known_outcome, method = "exact")
 
-rm(cond_final_den)
+
 rm (cfr_with_CI)
+rm(cond_final_den)
+```
+
+Bases para mapas
+
+```{r}
+
+municipios=st_read ("C:/Users/ASUS M509/Downloads/mpio/mpio.shp")
+#Silueta mapa RD
+
+municipios$COD_MUN<-as.numeric(municipios$MPIOS)
+
+municipios<-left_join(municipios, MUN_COL_PREV, by="COD_MUN")
+
+ggplot(data = municipios) +
+  geom_sf()
+
+```
+
+# MAPAS
+
+Mapa altitud media 
+
+
+```{r}
+ggplot(data = municipios) +
+  geom_sf()
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = `Altitud media m,s,n,m`), color= "black") + 
+  scale_fill_gradient(low = "dark green", high = "blue", na.value = "dark gray")
+```
+
+
+Mapa temperatura 
+
+
+```{r}
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = `Clima °C`), color= "black") + 
+  scale_fill_gradient(low = "yellow", high = "red", na.value = "gray")
+```
+
+
+Mapa aeropuerto 
+
+
+```{r}
+ggplot(data = municipios) +
+  geom_sf(aes(fill = `Valor Agregado Municipal (VA)`), color= "black")+ 
+  scale_fill_gradient(low = "blue", high = "red", na.value = "gray")
+```
+
+mapa penetracion internet
+
+
+```{r}
+ggplot(data = municipios) +
+  geom_sf(aes(fill = Penetracion_Internet ), color= "black")
+
+```
+
+Mapa Indice_Desempeño_Fiscal
+
+```{r}
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = Penetracion_Internet ), color= "black")
+
+```
+
+DIMENSION URBANA 
+
+```{r}
+
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = `DIMENSION URBANA` ), color= "black") + 
+  scale_fill_gradient(low = "blue", high = "green", na.value = "gray")
 
 ```
 
 
+DIMENSIÓN ECONOMICA
+
 ```{r}
-#creo un dataset con :municipio, fechas, casos , muertes¿?
-# incluyo lo registrado en vacunacion en PAIWEB el rezago aun no esta ??
 
 
+ggplot(data = municipios) +
+  geom_sf(aes(fill = `DIMENSIÓN ECONOMICA` ), color= "black") + 
+  scale_fill_gradient(low = "blue", high = "green", na.value = "gray")
+
+```
+
+DIMENSIÓN CALIDAD DE VIDA
+
+```{r}
+
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = `DIMENSIÓN CALIDAD DE VIDA` ), color= "black") + 
+  scale_fill_gradient(low = "blue", high = "green", na.value = "gray")
+
+```
+
+DIMENSIÓN INSTITUCIONAL
+
+```{r}
+
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = `DIMENSIÓN INSTITUCIONAL` ), color= "black") + 
+  scale_fill_gradient(low = "blue", high = "green", na.value = "gray")
 
 ```
 
 
+Numero de casos COVID-19
+
 ```{r}
-install.packages ( "incidencia" )
-library(incidence)
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = Total_casos), color= "black") + 
+  scale_fill_gradient(low = "yellow", high = "red", na.value = "gray") 
+
+```
 
 
-dat  <-  basecovidfinal $`Fecha de diagnóstico`
+DENSIDAD POBLACIONAL 
+
+```{r}
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = DEN_POB), color= "black") + 
+  scale_fill_gradient(low = "yellow", high = "red", na.value = "gray") 
+
+```
 
 
-i.7  <-  incidence ( dat , interval  =  31 )
- i.7 
- 
- plot ( i.7 )
+IPM_2020
 
-i.7.sexo  <-  incidence ( dat , interval =  "month" , groups =   basecovidfinal$Sexo )
- i.7.sexo 
- 
- 
- plot(i.7.sexo, stack = TRUE, border = "grey")
+```{r}
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = IPM_MUN), color= "black") + 
+  scale_fill_gradient(low = "yellow", high = "red", na.value = "gray") 
+
+```
+
+
+
+IPM_2020
+
+```{r}
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = IPM_MUN), color= "black") + 
+  scale_fill_gradient(low = "green", high = "red", na.value = "gray") 
+
+```
+
+IPM_2020
+
+```{r}
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = IPM_MUN), color= "black") + 
+  scale_fill_gradient(low = "yellow", high = "red", na.value = "gray") 
+
+```
+
+
+PREVALENCIA HTA 
+
+```{r}
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = PRE_HTA), color= "black") + 
+  scale_fill_gradient(low = "Beige", high = "red", na.value = "gray") 
+
+```
+
+PREVALENCIA DM
+
+```{r}
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = PRE_DM), color= "black") + 
+  scale_fill_gradient(low = "Orange", high = "Red", na.value = "gray") 
+
+```
+
+PREVALENCIA ERC
+
+```{r}
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = PRE_ERC), color= "black") + 
+  scale_fill_gradient(low = "Beige", high = "Red", na.value = "gray") 
+
+```
+
+PREVALENCIA CA
+
+```{r}
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = PRE_CA), color= "black") + 
+  scale_fill_gradient(low = "Yellow", high = "Red", na.value = "gray") 
+
+```
+
+
+Promedio de edad casos covid
+
+```{r}
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = Promedio_Edad_años), color= "black") + 
+  scale_fill_gradient(low = "Blue", high = "green", na.value = "gray") 
 
 ```
