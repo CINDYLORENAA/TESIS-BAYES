@@ -669,3 +669,44 @@ moran.test(municipios$Total_casos, listw = queen_col_lw, zero.policy = TRUE)
 moran.test(c(1:1119), listw = queen_col_lw, zero.policy = TRUE)
 
 ```
+
+
+
+Correlacion 
+
+```{r}
+
+#supuesto de normalidad
+
+shapiro.test(municipios$`Altitud media m,s,n,m`)
+shapiro.test(municipios$`Temperatura °C`)
+shapiro.test(municipios$`Valor Agregado Municipal (VA)`)
+shapiro.test(municipios$IPM_MUN)
+shapiro.test(municipios$PRE_HTA)
+shapiro.test(municipios$PRE_DM)
+shapiro.test(municipios$PRE_ERC)
+shapiro.test(municipios$PRE_CA)
+shapiro.test(municipios$Densidad_pob)
+shapiro.test(municipios$Promedio_Edad_años)
+shapiro.test(municipios$Densidad_incidencia_x10.000)
+shapiro.test(municipios$Tasa_mortalidad_x10.000 )
+shapiro.test(municipios$Tasa_letalidad_x10.000 )
+
+
+cuantitativas<-MUN_COL_PREV %>%   select(`Altitud media m,s,n,m`, `Temperatura °C`, `Valor Agregado Municipal (VA)`, IPM_MUN, PRE_HTA,  PRE_DM, PRE_ERC, PRE_CA, Densidad_pob,   Promedio_Edad_años, Densidad_incidencia_x10.000, Tasa_mortalidad_x10.000, Tasa_letalidad_x10.000 )
+
+```
+
+
+```{r}
+library(corrplot)
+
+
+M<-cor(cuantitativas, method = c("kendall"), use = "na.or.complete")
+corrplot(M, method = "color")
+
+```
+
+
+
+
