@@ -1,4 +1,4 @@
-------
+---
 title: "ANALISIS"
 author: "Lorena Albarracin Avila"
 date: "9/9/2022"
@@ -42,7 +42,16 @@ library(maptools)
 ```{r}
 
 basecovid <- read_csv("data/basecovid.csv")
-MUN_COL_PREV <- read_excel("data/MUN_COL_PREV.xlsx")
+MUN_COL <- read_excel("data/MUN_COL.xlsx")
+BASE_COV19_IPM <- read_csv("data/BASE_COV19_IPM.csv")
+BASE_COV19_IPM <- BASE_COV19_IPM %>% select(CodeM, DEN_POB) %>% group_by(CodeM) %>% distinct()
+BASE_COV19_IPM = rename(BASE_COV19_IPM, c(CodeM ="COD_MUN"))
+#BASE_COV19_IPM = rename(BASE_COV19_IPM, c( COD_MUN ="CodeM"))
+
+MUN_COL_PREV<-left_join(MUN_COL,BASE_COV19_IPM, by="COD_MUN") 
+
+rm(MUN_COL)
+rm (BASE_COV19_IPM)
 
 ```
 
@@ -236,9 +245,6 @@ casos acumulados por tiempo
 ```{r}
 Casos_acum<- basecovidfinal %>% select(`Fecha de diagnóstico`,`Código DIVIPOLA municipio`,  `Nombre municipio` , ind ) %>% group_by(`Fecha de diagnóstico`) %>% summarise(casos = sum(ind))
 
-
-
-
 Casos_acum<- mutate(Casos_acum, freq.acumulative = cumsum(casos))
 
 Casos_acum$casos_t<- mutate(Casos_acum, freq.acumulative = cumsum(casos))
@@ -285,7 +291,7 @@ plot(Casos_acum$`Fecha de diagnóstico`, Casos_acum$freq.acumulative, type = "l"
 
 
 
-DIMENSION AMBIENTAL 
+ 
 ```{r}
 table1(~  `Temperatura °C` + POB_Cabecera_Municipal_2020 +  `Altitud media m,s,n,m`+ `Valor Agregado Municipal (VA)`+ Penetracion_Internet+  Indice_Desempeño_Fiscal+ `DIMENSION URBANA`
 +  `DIMENSIÓN ECONOMICA` + IPM_MUN+  Aeropuerto_Nal +  Aeropuerto_Inal, data=MUN_COL_PREV, overall="Total")
@@ -296,12 +302,19 @@ table1(~  `Temperatura °C` + POB_Cabecera_Municipal_2020 +  `Altitud media m,s,
 
 # base de demografia y poblacion 
 
-%_poblacion_ rural
-%_poblacion_ urbana
+%_poblacion_rural
+%_poblacion_urbana
 Densidad poblacional
 POB_Cabecera_Municipal_2020
 POB_Centros_Poblados_Rural_Disperso_2020
 POB_Total_2020	
+
+ 
+```{r}
+table1(~  poblacion_rural+ poblacion_urbana + POB_Cabecera_Municipal_2020 +  `Altitud media m,s,n,m`+ `Valor Agregado Municipal (VA)`+ Penetracion_Internet+  Indice_Desempeño_Fiscal+ `DIMENSION URBANA`
++  `DIMENSIÓN ECONOMICA` + IPM_MUN+  Aeropuerto_Nal +  Aeropuerto_Inal, data=MUN_COL_PREV, overall="Total")
+
+```
 
 DENSIDAD POBLACIONAL 
 
@@ -785,5 +798,13 @@ rm(casos_mes2)
 rm(Municipios_Excluidos_copia)
 
 ```
+
+
+
+
+
+
+
+
 
 
