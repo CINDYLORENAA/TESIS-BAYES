@@ -495,6 +495,57 @@ Proporcion de mujeres
 ggplot(data = municipios) +
   geom_sf(aes(fill = Proporcion_Mujeres)) + 
   scale_fill_gradient(low = "green", high = "red", na.value = "gray") 
+  
+  
+  
+  
+  
+  predecir prevalencias
+
+
+```{r}
+
+ modHTA<-lm (PRE_HTA ~    Penetracion_Internet   +  `DIMENSION URBANA` + `DIMENSIÓN ECONOMICA`+  `DIMENSIÓN INSTITUCIONAL` +  IPM_MUN + poblacion_urbana + Tasa_mortalidadGEN + personas_desplazadas_expulsadas+   personas_desplazadas  , data= na.omit (MUN_COL_PREV) )
+ summary(modHTA)
+ 
+ data_pru<-MUN_COL_PREV%>% filter(is.na (PRE_HTA))
+
+write.csv(data_pru, "data_pru.csv")
+
+ 
+
+
+```
+
+```{r}
+modDM<-lm (PRE_DM ~   Penetracion_Internet   +  `DIMENSION URBANA` + `DIMENSIÓN ECONOMICA`+  `DIMENSIÓN INSTITUCIONAL` +  IPM_MUN + poblacion_urbana + Tasa_mortalidadGEN + personas_desplazadas_expulsadas+   personas_desplazadas  , data= na.omit (MUN_COL_PREV) )
+ summary(modDM)
+ 
+ data_pru<-MUN_COL_PREV %>% filter(is.na (PRE_HTA))
+
+
+ predict(modHTA, newdata= data_pru)
+
+
+ 
+ 
+ 
+#`Altitud media m,s,n,m`,`Temperatura °C`, `Valor Agregado Municipal (VA)`, Penetracion_Internet, Indice_Desempeño_Fiscal, `DIMENSION URBANA`, `DIMENSIÓN ECONOMICA`, `DIMENSIÓN CALIDAD DE VIDA`,  `DIMENSIÓN INSTITUCIONAL`,  IPM_MUN, PRE_HTA,  PRE_DM, PRE_ERC, PRE_CA, Densidad_pob,   Promedio_Edad_años, Densidad_incidencia_x10.000, Tasa_mortalidad_x10.000, Tasa_letalidad_x10.000,  NBI_Area_Urbana, NBI_Area_rural, Población_condición_miseria, Afiliados_SGSSS, poblacion_urbana, Cobertura_acueducto, Cobertura_alcantarillado, Cobertura_bruta_educación, Tasa_mortalidadGEN, personas_desplazadas_expulsadas, personas_desplazadas_recibidas, personas_desplazadas  
+
+```
+
+
+```{r}
+data_pru<-MUN_COL_PREV %>% filter(is.na (PRE_HTA))
+
+
+ predict(modHTA, newdata= data_pru)
+
+
+
+```
+
+
 
 ```
 
