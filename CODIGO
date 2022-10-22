@@ -1,5 +1,4 @@
----
-title: "ANALISIS"
+---title: "ANALISIS"
 author: "Lorena Albarracin Avila"
 date: "9/9/2022"
 output: html_document
@@ -138,8 +137,6 @@ Edad<- basecovidfinal %>% select(`Código DIVIPOLA municipio`,Edad_años ) %>% g
 
 MUN_COL_PREV<-merge (MUN_COL_PREV,Edad, by.x="COD_MUN", by.y="Código DIVIPOLA municipio") 
 
-
-
 ```
 
 #Distribucion de casos por sexo por municpio 
@@ -166,8 +163,6 @@ casos_mun = rename(casos_mun, c(Freq= "Total_casos"))
 
 MUN_COL_PREV<-merge(MUN_COL_PREV,casos_mun, by.x="COD_MUN", by.y="Var1")  
 
-
-
 ```
 
 
@@ -178,10 +173,6 @@ cond_final <- basecovidfinal %>% select(`Código DIVIPOLA municipio`, Recuperado
 
 
 cond_final[cond_final=="fallecido"] <- "Fallecido"
-
-
-
-
 
 cond_final$muerto <- (if_else(condition = cond_final$Recuperado == "Fallecido", true = 1, false = 0))
 
@@ -290,31 +281,33 @@ plot(Casos_acum$`Fecha de diagnóstico`, Casos_acum$freq.acumulative, type = "l"
 
 
 
-
- 
-```{r}
-table1(~  `Temperatura °C` + POB_Cabecera_Municipal_2020 +  `Altitud media m,s,n,m`+ `Valor Agregado Municipal (VA)`+ Penetracion_Internet+  Indice_Desempeño_Fiscal+ `DIMENSION URBANA`
-+  `DIMENSIÓN ECONOMICA` + IPM_MUN+  Aeropuerto_Nal +  Aeropuerto_Inal, data=MUN_COL_PREV, overall="Total")
-
-```
-
-
-
-# base de demografia y poblacion 
+# 1. base de demografia y poblacion 
 
 %_poblacion_rural
 %_poblacion_urbana
 Densidad poblacional
-POB_Cabecera_Municipal_2020
-POB_Centros_Poblados_Rural_Disperso_2020
 POB_Total_2020	
 
  
 ```{r}
-table1(~  poblacion_rural+ poblacion_urbana + POB_Cabecera_Municipal_2020 +  `Altitud media m,s,n,m`+ `Valor Agregado Municipal (VA)`+ Penetracion_Internet+  Indice_Desempeño_Fiscal+ `DIMENSION URBANA`
-+  `DIMENSIÓN ECONOMICA` + IPM_MUN+  Aeropuerto_Nal +  Aeropuerto_Inal, data=MUN_COL_PREV, overall="Total")
-
+table1(~  `poblacion_ rural`+ poblacion_urbana + Densidad_pob  + POB_Total_2020  , data=MUN_COL_PREV, overall="Total")
 ```
+%_poblacion_rural
+```{r}
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = `poblacion_ rural`)) + 
+  scale_fill_gradient(low = "blue", high = "green", na.value = "gray") 
+```
+
+%_poblacion_urbana
+```{r}
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = poblacion_urbana)) + 
+  scale_fill_gradient(low = "blue", high = "green", na.value = "gray") 
+```
+
 
 DENSIDAD POBLACIONAL 
 
@@ -322,14 +315,23 @@ DENSIDAD POBLACIONAL
 
 ggplot(data = municipios) +
   geom_sf(aes(fill = Densidad_pob)) + 
-  scale_fill_gradient(low = "yellow", high = "red", na.value = "gray") 
+  scale_fill_gradient(low = "blue", high = "green", na.value = "gray") 
 
 ```
 
-# Climatica y geografica
+
+
+
+
+# 2. Climatica y geografica
 Superficie Km2
 Altitud media m,s,n,m	
 Temperatura °C
+
+```{r}
+table1(~  `Temperatura °C` + `Altitud media m,s,n,m`, data=MUN_COL_PREV, overall="Total")
+```
+
 
 Mapa altitud media 
 
@@ -356,12 +358,38 @@ ggplot(data = municipios) +
 
 
 
-# Pobreza
+# 3. Pobreza
 NBI_Area_Urbana
 NBI_Area_rural
 Población_condición_miseria
 IPM
 DIMENSIÓN CALIDAD DE VIDA
+
+```{r}
+table1(~  NBI_Area_rural+ NBI_Area_Urbana + Población_condición_miseria + IPM_MUN 
+       + `DIMENSIÓN CALIDAD DE VIDA`  , data=MUN_COL_PREV, overall="Total")
+```
+
+NBI_Area_rural
+
+```{r}
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = NBI_Area_rural)) + 
+  scale_fill_gradient(low = "green", high = "red", na.value = "gray") 
+
+```
+
+
+NBI_Area_Urbana
+
+```{r}
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = NBI_Area_Urbana)) + 
+  scale_fill_gradient(low = "green", high = "red", na.value = "gray") 
+
+```
 
 
 IPM_2020
@@ -386,10 +414,16 @@ ggplot(data = municipios) +
 
 ```
 
-# Desempeño fiscal
+# 4. Desempeño fiscal
 Indice_Desempeño_Fiscal
 DIMENSIÓN INSTITUCIONAL
 DIMENSION URBANA 
+
+```{r}
+table1(~ Indice_Desempeño_Fiscal+ `DIMENSIÓN INSTITUCIONAL` + `DIMENSION URBANA`  , data=MUN_COL_PREV, overall="Total")
+
+```
+
 
 Mapa Indice_Desempeño_Fiscal
 
@@ -423,30 +457,72 @@ ggplot(data = municipios) +
 
 ```
 
-# Indicador de Importancia Económica Municipal
+# 5.Importancia Económica Municipal
 
 Valor Agregado Municipal (VA)
 DIMENSIÓN ECONOMICA
 
+
+```{r}
+table1(~ `Valor Agregado Municipal (VA)`+ `DIMENSIÓN ECONOMICA` , data=MUN_COL_PREV, overall="Total")
+```
+
+`Valor Agregado Municipal (VA)`
+
+```{r}
+ggplot(data = municipios) +
+  geom_sf(aes(fill = `Valor Agregado Municipal (VA)` )) + 
+  scale_fill_gradient(low = "blue", high = "green", na.value = "gray")
+
+```
+
+
 DIMENSIÓN ECONOMICA
 
 ```{r}
-
-
 ggplot(data = municipios) +
   geom_sf(aes(fill = `DIMENSIÓN ECONOMICA` )) + 
   scale_fill_gradient(low = "blue", high = "green", na.value = "gray")
 
 ```
 
-# Conflicto armado y seguridad ciudadana
+# 6.  Conflicto armado y seguridad ciudadana
 Número acumulado de personas desplazadas expulsadas
 Número acumulado de personas desplazadas recibidas
 Número de personas desplazadas
 
+```{r}
+table1(~ personas_desplazadas_expulsadas + personas_desplazadas_recibidas + personas_desplazadas, data=MUN_COL_PREV, overall="Total")
+```
+Número acumulado de personas desplazadas expulsadas
+
+```{r}
+ggplot(data = municipios) +
+  geom_sf(aes(fill = personas_desplazadas_expulsadas )) + 
+  scale_fill_gradient(low = "blue", high = "green", na.value = "gray")
+
+```
+
+Número acumulado de personas_desplazadas_recibidas
+
+```{r}
+ggplot(data = municipios) +
+  geom_sf(aes(fill = personas_desplazadas_recibidas )) + 
+  scale_fill_gradient(low = "blue", high = "green", na.value = "gray")
+
+```
 
 
-#Salud
+Número acumulado personas_desplazadas
+
+```{r}
+ggplot(data = municipios) +
+  geom_sf(aes(fill = personas_desplazadas )) + 
+  scale_fill_gradient(low = "blue", high = "green", na.value = "gray")
+
+```
+
+#7. Salud
 Prevalencia de HTA
 Prevalencia de DM
 Prevalencia de ERC
@@ -455,6 +531,13 @@ Afiliados_SGSSS
 densidad de incidencia de Covid
 Tasa de letalidad de Covid
 Tasa de mortalidad de Covid 
+Promedio de edad casos covid
+Proporcion de mujeres
+
+```{r}
+table1(~ PRE_HTA + PRE_DM + PRE_ERC + Tasa_mortalidadGEN + Afiliados_SGSSS + Densidad_incidencia_x10.000 + Tasa_letalidad_x10.000 + Tasa_mortalidad_x10.000, data=MUN_COL_PREV, overall="Total")
+```
+
 
 PREVALENCIA HTA 
 
@@ -485,6 +568,21 @@ ggplot(data = municipios) +
   scale_fill_gradient(low = "Beige", high = "Red", na.value = "gray") 
 
 ```
+
+
+
+Tasa_mortalidadGEN
+
+```{r}
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = Tasa_mortalidadGEN)) + 
+  scale_fill_gradient(low = "green", high = "red", na.value = "gray") 
+
+```
+
+
+
 
 Promedio de edad casos covid
 
@@ -550,8 +648,12 @@ Cobertura_acueducto
 Cobertura_alcantarillado
 Penetracion_Internet
 
-mapa penetracion internet
+```{r}
+table1(~ Cobertura_acueducto + Cobertura_alcantarillado + Penetracion_Internet  , data=MUN_COL_PREV, overall="Total")
+```
 
+
+mapa penetracion internet
 
 ```{r}
 ggplot(data = municipios) +
@@ -559,8 +661,27 @@ ggplot(data = municipios) +
 
 ```
 
+mapa Cobertura_alcantarillado
+
+```{r}
+ggplot(data = municipios) +
+  geom_sf(aes(fill = Cobertura_alcantarillado ))
+
+```
+
 # Educación
 Cobertura_bruta_educación_Total
+
+```{r}
+table1(~   Cobertura_bruta_educación, data=MUN_COL_PREV, overall="Total")
+```
+```{r}
+ggplot(data = municipios) +
+  geom_sf(aes(fill = Cobertura_bruta_educación ))
+
+```
+
+
 
 # movilidad
 
@@ -568,6 +689,9 @@ Aeropuerto_Nal
 Aeropuerto_Inal	
 Número de destinos internacionales
 
+```{r}
+table1(~   Aeropuerto_Inal + Aeropuerto_Nal + `Número de destinos internacionales`, data=MUN_COL_PREV, overall="Total")
+```
 
 
 Mapa aeropuerto 
@@ -575,7 +699,7 @@ Mapa aeropuerto
 
 ```{r}
 ggplot(data = municipios) +
-  geom_sf(aes(fill = `Valor Agregado Municipal (VA)`), color= "black")
+  geom_sf(aes(fill = `Número de destinos internacionales`), color= "black")
 ```
 
 
@@ -796,15 +920,3 @@ rm(Sexo_mun)
 rm(datosmun)
 rm(casos_mes2)
 rm(Municipios_Excluidos_copia)
-
-```
-
-
-
-
-
-
-
-
-
-
