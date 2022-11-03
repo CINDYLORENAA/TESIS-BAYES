@@ -919,4 +919,947 @@ rm(Sexo)
 rm(Sexo_mun)
 rm(datosmun)
 rm(casos_mes2)
+rm(Municipios_Excluidos_copia) 
+
+
+
+
+###########################3
+
+---
+title: "ANALISIS"
+author: "Lorena Albarracin Avila"
+date: "9/9/2022"
+output: html_document
+---
+
+
+#Librerias usadas
+
+
+```{r}
+library(readxl)
+library(table1)
+library(mosaic)
+library(DescTools)
+library(ggplot2)
+library (tidyverse)
+library(readr)
+library(dplyr)
+library(lubridate)# fechas
+library(reshape)
+library(geoR)
+library(knitr)
+library(incidence)
+library(binom)
+
+library(s2)
+library(tmap)
+library(sf)
+library(ggmap)
+library(rgdal)
+library(rgeos)
+library(maptools)
+
+
+
+```
+
+
+#Lectura bases de datos
+```{r}
+
+basecovid <- read_csv("data/basecovid.csv")
+MUN_COL <- read_excel("data/MUN_COL.xlsx")
+BASE_COV19_IPM <- read_csv("data/BASE_COV19_IPM.csv")
+BASE_COV19_IPM <- BASE_COV19_IPM %>% select(CodeM, DEN_POB) %>% group_by(CodeM) %>% distinct()
+BASE_COV19_IPM = rename(BASE_COV19_IPM, c(CodeM ="COD_MUN"))
+#BASE_COV19_IPM = rename(BASE_COV19_IPM, c( COD_MUN ="CodeM"))
+
+MUN_COL_PREV<-left_join(MUN_COL,BASE_COV19_IPM, by="COD_MUN") 
+
+rm(MUN_COL)
+rm (BASE_COV19_IPM)
+
+```
+
+# Limpieza base de datos CASOS  COVID
+
+#Fechas 
+
+```{r}
+basecovid$`fecha reporte web`<- as.Date(basecovid$`fecha reporte web`,format="%Y/%m/%d")
+basecovid$`Fecha de notificación`<- as.Date(basecovid$`Fecha de notificación`,format="%m/%Y")
+basecovid$`Fecha de diagnóstico`<- as.Date(basecovid$`Fecha de diagnóstico`,format="%m/%Y")
+basecovid$`Fecha de inicio de síntomas`<- as.Date(basecovid$`Fecha de inicio de síntomas`,format="%m/%Y")
+basecovid$`Fecha de muerte`<- as.Date(basecovid$`Fecha de muerte`,format="%m/%Y")
+basecovid$`Fecha de recuperación`<- as.Date(basecovid$`Fecha de recuperación`,format="%m/%Y")
+basecovid$año <- as.numeric(format(basecovid$`Fecha de diagnóstico`,"%Y"))
+basecovid$mes <- as.numeric(format(basecovid$`Fecha de diagnóstico`,"%m"))
+
+
+```
+
+
+seleccionar solo año 2020 y 2021, y municipios elegidos 
+
+```{r}
+basecovid<-basecovid   %>% 
+     filter(año %in% c("2020","2021"))  
+
+
+
+basecovid$ind <- ifelse(is.element(basecovid$`Código DIVIPOLA municipio`, c(27086,94663,88001,88564,91263,91405,91407,91430,91460,91530,91536,91669,91798,94343,94883,94884,94885,94886,94887,94888,97511,97777,97889)),0,1)
+
+basecovidfinal<-basecovid %>% 
+     filter(ind %in% c(1)) 
+
+
+
+basecovidfinal$Sexo[basecovidfinal$Sexo =="f"] <- "F"
+basecovidfinal$Sexo[basecovidfinal$Sexo =="m"] <- "M"
+
+basecovidfinal$Edad_años <- round(if_else(condition = basecovidfinal$`Unidad de medida de edad` == 2,
+                            true = basecovidfinal$Edad/12,
+                            false = if_else(condition = basecovidfinal$`Unidad de medida de edad` == 3,
+                                            true = basecovidfinal$Edad/365,
+                                            false = basecovidfinal$Edad)),4)
+
+
+table1(~ Sexo + Edad_años + `Tipo de contagio`   | año, data=basecovidfinal, overall="Total")
+
+
+```
+
+Codigos de municipios a excluir
+
+```{r}
+
+### Por ser areas no municipalizadas, San Andres, Providencia y Barrancominas. 
+#excluidos<- c(27086,94663,88001,88564,91263,91405,91407,91430,91460,91530,91536,91669,91798,94343,94883,94884,94885,94886,94887,94888,97511,97777,97889)
+
+
+```
+
+
+
+#BASE DE DATOS DE MUNICIPIOS 
+
+
+# Tablas de municipios 
+
+
+```{r}
+MUN_COL_PREV$Densidad_pob <- (if_else(condition = is.na(MUN_COL_PREV$DEN_POB) == TRUE , true = MUN_COL_PREV$POB_Total_2020/MUN_COL_PREV$`Superficie Km2`, false =MUN_COL_PREV$DEN_POB ))
+
+```
+
+
+#Distribucion de casos por Promedio de edad por municipio 
+
+```{r}
+
+Edad<- basecovidfinal %>% select(`Código DIVIPOLA municipio`,Edad_años ) %>% group_by(`Código DIVIPOLA municipio`)%>% summarise(Promedio_Edad_años = mean(Edad_años))
+
+MUN_COL_PREV<-merge (MUN_COL_PREV,Edad, by.x="COD_MUN", by.y="Código DIVIPOLA municipio") 
+
+```
+
+#Distribucion de casos por sexo por municpio 
+```{r}
+Sexo <- basecovidfinal %>% select(`Código DIVIPOLA municipio`,Sexo ) %>% group_by(`Código DIVIPOLA municipio`)
+
+Sexo$Femenino <- (if_else(condition = Sexo$Sexo== "F", true = 1, false = 0))
+
+
+Sexo_mun<- Sexo %>% select(`Código DIVIPOLA municipio`, Femenino ) %>% group_by(`Código DIVIPOLA municipio`)%>% summarise(Proporcion_Mujeres  = mean(Femenino))
+
+MUN_COL_PREV<-merge (MUN_COL_PREV,Sexo_mun, by.x="COD_MUN", by.y="Código DIVIPOLA municipio") 
+
+
+```
+
+
+#numero de casos por municipio
+
+```{r}
+casos_mun<-as.data.frame(table(basecovidfinal$`Código DIVIPOLA municipio`))
+#casos_mun = rename(casos_mun, c(Total_casos= "Freq"))
+casos_mun = rename(casos_mun, c(Freq= "Total_casos"))
+
+
+MUN_COL_PREV<-merge(MUN_COL_PREV,casos_mun, by.x="COD_MUN", by.y="Var1")  
+
+```
+
+
+Tasas: incidencia, mortalidad, letalidad  por Municipio 
+
+```{r}
+cond_final <- basecovidfinal %>% select(`Código DIVIPOLA municipio`, Recuperado) %>% group_by(`Código DIVIPOLA municipio`)
+
+
+cond_final[cond_final=="fallecido"] <- "Fallecido"
+
+cond_final$muerto <- (if_else(condition = cond_final$Recuperado == "Fallecido", true = 1, false = 0))
+
+
+cond_final$recuperado <- (if_else(condition = cond_final$Recuperado == "Recuperado", true = 1, false = 0))
+
+cond_final_mun<- cond_final %>% group_by(`Código DIVIPOLA municipio`)%>% summarise(Num_muertos  = sum(muerto))
+
+
+cond_final_den<- cond_final %>% group_by(`Código DIVIPOLA municipio`)%>% summarise(Num_recup  = sum(recuperado))
+
+cond_final_den$total<-cond_final_mun$Num_muertos+cond_final_den$Num_recup
+  
+MUN_COL_PREV<-merge (MUN_COL_PREV,cond_final_mun, by.x="COD_MUN", by.y="Código DIVIPOLA municipio") 
+
+
+
+##Densidad de  incidencia (NUM CASOS/ total poblacion  )
+
+MUN_COL_PREV$Densidad_incidencia_x10.000<-round(MUN_COL_PREV$Total_casos/MUN_COL_PREV$POB_Total*10000, 2)  
+
+##Tasa mortalidad (muertos/ total poblacion  )
+
+MUN_COL_PREV$Tasa_mortalidad_x10.000<-round(MUN_COL_PREV$Num_muertos/  MUN_COL_PREV$POB_Total_2020*10000, 2) 
+
+##Tasa Letalidad (muertos/ recuperados -muertos )
+
+MUN_COL_PREV$Tasa_letalidad_x10.000<-round (MUN_COL_PREV$Num_muertos/cond_final_den$total*10000) 
+
+```
+
+
+#  primeros municipios con mayor tasa  de incidencia
+
+```{r}
+MUN_COL_PREV<-MUN_COL_PREV %>% arrange(desc(Densidad_incidencia_x10.000))
+```
+
+
+
+```{r}
+library(dplyr)
+datosmun<-basecovidfinal %>% group_by  (`Código DIVIPOLA municipio`, año) %>% count(mes)
+
+
+datosmunprueba<-basecovidfinal %>% group_by(`Fecha de diagnóstico`,`Nombre municipio`, `Código DIVIPOLA municipio`)%>% count(`Nombre municipio`)
+
+
+#datosmun = rename(datosmun, c(COD_MUN="Código DIVIPOLA municipio"))
+datosmun = rename(datosmun, c(`Código DIVIPOLA municipio`="COD_MUN"))
+library(maditr)
+casos_mes2<- dcast(datosmun, COD_MUN ~ año + mes, value.var = "n")
+
+
+```
+
+
+
+casos acumulados por tiempo
+
+```{r}
+Casos_acum<- basecovidfinal %>% select(`Fecha de diagnóstico`,`Código DIVIPOLA municipio`,  `Nombre municipio` , ind ) %>% group_by(`Fecha de diagnóstico`) %>% summarise(casos = sum(ind))
+
+Casos_acum<- mutate(Casos_acum, freq.acumulative = cumsum(casos))
+
+Casos_acum$casos_t<- mutate(Casos_acum, freq.acumulative = cumsum(casos))
+```
+
+```{r}
+municipios=st_read ( "fuentes/mpio2/Munpio.shp")
+
+
+
+municipios$COD_MUN<-as.numeric(municipios$MpCodigo)
+
+
+municipios<-left_join(municipios, MUN_COL_PREV, by="COD_MUN")
+```
+
+##ANALISIS DESCRIPTIVO 
+
+tasa de letalidad general 
+
+```{r}
+n_dead <- sum(MUN_COL_PREV$Num_muertos)
+n_known_outcome <- sum(cond_final_den$total)
+cfr <- n_dead / n_known_outcome *100
+
+cfr_with_CI <- binom.confint(n_dead, n_known_outcome, method = "exact")
+
+
+rm (cfr_with_CI)
+rm(cond_final_den)
+```
+
+```{r}
+plot(Casos_acum$`Fecha de diagnóstico`, Casos_acum$casos, type = "l",
+     col = "lightblue", # Color
+     lwd = 0.5, main = 'Casos Covid') 
+
+plot(Casos_acum$`Fecha de diagnóstico`, Casos_acum$freq.acumulative, type = "l",
+     col = "lightblue", # Color
+     lwd = 0.5, main = 'Casos Covid')
+
+```
+
+
+
+# 1. base de demografia y poblacion 
+
+%_poblacion_rural
+%_poblacion_urbana
+Densidad poblacional
+POB_Total_2020	
+
+ 
+```{r}
+table1(~  `poblacion_ rural`+ poblacion_urbana + Densidad_pob  + POB_Total_2020  , data=MUN_COL_PREV, overall="Total")
+```
+%_poblacion_rural
+```{r}
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = `poblacion_ rural`)) + 
+  scale_fill_gradient(low = "blue", high = "green", na.value = "gray") 
+```
+
+%_poblacion_urbana
+```{r}
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = poblacion_urbana)) + 
+  scale_fill_gradient(low = "blue", high = "green", na.value = "gray") 
+```
+
+
+
+
+
+
+
+# 2. Climatica y geografica
+Superficie Km2
+Altitud media m,s,n,m	
+Temperatura °C
+
+```{r}
+table1(~  `Temperatura °C` + `Altitud media m,s,n,m`, data=MUN_COL_PREV, overall="Total")
+```
+
+
+Mapa altitud media 
+
+
+```{r}
+ggplot(data = municipios) +
+  geom_sf()
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = `Altitud media m,s,n,m`)) + 
+  scale_fill_gradient(low = "dark green", high = "blue", na.value = "dark gray")
+```
+
+
+Mapa temperatura 
+
+
+```{r}
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = `Temperatura °C`)) + 
+  scale_fill_gradient(low = "yellow", high = "red", na.value = "gray")
+```
+
+
+
+# 3. Pobreza
+NBI_Area_Urbana
+NBI_Area_rural
+Población_condición_miseria
+IPM
+DIMENSIÓN CALIDAD DE VIDA
+
+```{r}
+table1(~  NBI_Area_rural+ NBI_Area_Urbana + Población_condición_miseria + IPM_MUN 
+       + `DIMENSIÓN CALIDAD DE VIDA`  , data=MUN_COL_PREV, overall="Total")
+```
+
+NBI_Area_rural
+
+```{r}
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = NBI_Area_rural)) + 
+  scale_fill_gradient(low = "green", high = "red", na.value = "gray") 
+
+```
+
+
+NBI_Area_Urbana
+
+```{r}
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = NBI_Area_Urbana)) + 
+  scale_fill_gradient(low = "green", high = "red", na.value = "gray") 
+
+```
+
+
+IPM_2020
+
+```{r}
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = IPM_MUN)) + 
+  scale_fill_gradient(low = "green", high = "red", na.value = "gray") 
+
+```
+
+
+DIMENSIÓN CALIDAD DE VIDA
+
+```{r}
+
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = `DIMENSIÓN CALIDAD DE VIDA` )) + 
+  scale_fill_gradient(low = "blue", high = "green", na.value = "gray")
+
+```
+
+# 4. Desempeño fiscal
+Indice_Desempeño_Fiscal
+DIMENSIÓN INSTITUCIONAL
+DIMENSION URBANA 
+
+```{r}
+table1(~ Indice_Desempeño_Fiscal+ `DIMENSIÓN INSTITUCIONAL` + `DIMENSION URBANA`  , data=MUN_COL_PREV, overall="Total")
+
+```
+
+
+Mapa Indice_Desempeño_Fiscal
+
+```{r}
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = Indice_Desempeño_Fiscal ))
+
+```
+
+DIMENSIÓN INSTITUCIONAL
+
+```{r}
+
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = `DIMENSIÓN INSTITUCIONAL` )) + 
+  scale_fill_gradient(low = "blue", high = "green", na.value = "gray")
+
+```
+
+
+DIMENSION URBANA 
+
+```{r}
+
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = `DIMENSION URBANA` )) + 
+  scale_fill_gradient(low = "blue", high = "green", na.value = "gray")
+
+```
+
+# 5.Importancia Económica Municipal
+
+Valor Agregado Municipal (VA)
+DIMENSIÓN ECONOMICA
+
+
+```{r}
+table1(~ `Valor Agregado Municipal (VA)`+ `DIMENSIÓN ECONOMICA` , data=MUN_COL_PREV, overall="Total")
+```
+
+`Valor Agregado Municipal (VA)`
+
+```{r}
+ggplot(data = municipios) +
+  geom_sf(aes(fill = `Valor Agregado Municipal (VA)` )) + 
+  scale_fill_gradient(low = "blue", high = "green", na.value = "gray")
+
+```
+
+
+DIMENSIÓN ECONOMICA
+
+```{r}
+ggplot(data = municipios) +
+  geom_sf(aes(fill = `DIMENSIÓN ECONOMICA` )) + 
+  scale_fill_gradient(low = "blue", high = "green", na.value = "gray")
+
+```
+
+# 6.  Conflicto armado y seguridad ciudadana
+Número acumulado de personas desplazadas expulsadas
+Número acumulado de personas desplazadas recibidas
+Número de personas desplazadas
+
+```{r}
+table1(~ personas_desplazadas_expulsadas + personas_desplazadas_recibidas + personas_desplazadas, data=MUN_COL_PREV, overall="Total")
+```
+Número acumulado de personas desplazadas expulsadas
+
+```{r}
+ggplot(data = municipios) +
+  geom_sf(aes(fill = personas_desplazadas_expulsadas )) + 
+  scale_fill_gradient(low = "blue", high = "green", na.value = "gray")
+
+```
+
+Número acumulado de personas_desplazadas_recibidas
+
+```{r}
+ggplot(data = municipios) +
+  geom_sf(aes(fill = personas_desplazadas_recibidas )) + 
+  scale_fill_gradient(low = "blue", high = "green", na.value = "gray")
+
+```
+
+
+Número acumulado personas_desplazadas
+
+```{r}
+ggplot(data = municipios) +
+  geom_sf(aes(fill = personas_desplazadas )) + 
+  scale_fill_gradient(low = "blue", high = "green", na.value = "gray")
+
+```
+
+#7. Salud
+Prevalencia de HTA
+Prevalencia de DM
+Prevalencia de ERC
+Tasa de mortalidad (x cada 1.000 habitantes)
+Afiliados_SGSSS
+densidad de incidencia de Covid
+Tasa de letalidad de Covid
+Tasa de mortalidad de Covid 
+Promedio de edad casos covid
+Proporcion de mujeres
+
+```{r}
+table1(~ PRE_HTA + PRE_DM + PRE_ERC + Tasa_mortalidadGEN + Afiliados_SGSSS + Densidad_incidencia_x10.000 + Tasa_letalidad_x10.000 + Tasa_mortalidad_x10.000, data=MUN_COL_PREV, overall="Total")
+```
+
+
+PREVALENCIA HTA 
+
+```{r}
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = PRE_HTA)) + 
+  scale_fill_gradient(low = "green", high = "red", na.value = "gray") 
+
+```
+
+PREVALENCIA DM
+
+```{r}
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = PRE_DM)) + 
+  scale_fill_gradient(low = "Orange", high = "Red", na.value = "gray") 
+
+```
+
+PREVALENCIA ERC
+
+```{r}
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = PRE_ERC)) + 
+  scale_fill_gradient(low = "Beige", high = "Red", na.value = "gray") 
+
+```
+
+
+
+Tasa_mortalidadGEN
+
+```{r}
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = Tasa_mortalidadGEN)) + 
+  scale_fill_gradient(low = "green", high = "red", na.value = "gray") 
+
+```
+
+
+
+
+Promedio de edad casos covid
+
+```{r}
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = Promedio_Edad_años)) + 
+  scale_fill_gradient(low = "green", high = "red", na.value = "gray") 
+
+```
+
+Proporcion de mujeres
+
+```{r}
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = Proporcion_Mujeres)) + 
+  scale_fill_gradient(low = "green", high = "red", na.value = "gray") 
+
+```
+
+Número muertos 
+
+```{r}
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = Num_muertos)) + 
+  scale_fill_gradient(low = "blue", high = "green", na.value = "gray") 
+
+```
+Densidad de incidencia
+
+```{r}
+ggplot(data = municipios) +
+  geom_sf(aes(fill = Densidad_incidencia_x10.000)) + 
+  scale_fill_gradient(low = "blue", high = "green", na.value = "gray") 
+
+```
+
+Tasa de mortalidad
+
+```{r}
+ggplot(data = municipios) +
+  geom_sf(aes(fill = Tasa_mortalidad_x10.000)) + 
+  scale_fill_gradient(low = "green", high = "red", na.value = "gray") 
+
+```
+Tasa de letalidad
+
+```{r}
+ggplot(data = municipios) +
+  geom_sf(aes(fill = Tasa_letalidad_x10.000)) + 
+  scale_fill_gradient(low = "green", high = "red", na.value = "gray90") 
+
+```
+
+
+
+
+#vivienda y acceso de servicios de salud
+
+Cobertura_acueducto
+Cobertura_alcantarillado
+Penetracion_Internet
+
+```{r}
+table1(~ Cobertura_acueducto + Cobertura_alcantarillado + Penetracion_Internet  , data=MUN_COL_PREV, overall="Total")
+```
+
+
+mapa penetracion internet
+
+```{r}
+ggplot(data = municipios) +
+  geom_sf(aes(fill = Penetracion_Internet ))
+
+```
+
+mapa Cobertura_alcantarillado
+
+```{r}
+ggplot(data = municipios) +
+  geom_sf(aes(fill = Cobertura_alcantarillado ))
+
+```
+
+# Educación
+Cobertura_bruta_educación_Total
+
+```{r}
+table1(~   Cobertura_bruta_educación, data=MUN_COL_PREV, overall="Total")
+```
+```{r}
+ggplot(data = municipios) +
+  geom_sf(aes(fill = Cobertura_bruta_educación ))
+
+```
+
+
+
+# movilidad
+
+Aeropuerto_Nal	
+Aeropuerto_Inal	
+Número de destinos internacionales
+
+```{r}
+table1(~   Aeropuerto_Inal + Aeropuerto_Nal + `Número de destinos internacionales`, data=MUN_COL_PREV, overall="Total")
+```
+
+
+Mapa aeropuerto 
+
+
+```{r}
+ggplot(data = municipios) +
+  geom_sf(aes(fill = `Número de destinos internacionales`), color= "black")
+```
+
+
+
+## Analisis de casos de COVID 19
+
+casos por mes y municipio para el año 2020-2021
+
+
+
+EXCLUIDOS
+
+```{r}
+Municipios_Excluidos_copia <- read_excel("fuentes/Municipios Excluidos - copia.xlsx")
+municipios<-left_join(municipios,Municipios_Excluidos_copia, by="COD_MUN")
+
+
+```
+
+
+Mapa de Municipios excluidos
+
+```{r}
+
+ggplot(data = municipios) +
+  geom_sf(aes(fill = EXCLUIDO))  
+
+```
+
+Correlacion 
+
+```{r}
+
+#supuesto de normalidad
+
+shapiro.test(municipios$`Altitud media m,s,n,m`)
+shapiro.test(municipios$`Temperatura °C`)
+shapiro.test(municipios$`Valor Agregado Municipal (VA)`)
+shapiro.test(municipios$IPM_MUN)
+shapiro.test(municipios$PRE_HTA)
+shapiro.test(municipios$PRE_DM)
+shapiro.test(municipios$PRE_ERC)
+
+shapiro.test(municipios$Densidad_pob)
+shapiro.test(municipios$Promedio_Edad_años)
+shapiro.test(municipios$Densidad_incidencia_x10.000)
+shapiro.test(municipios$Tasa_mortalidad_x10.000 )
+shapiro.test(municipios$Tasa_letalidad_x10.000 )
+
+
+MUN_COL_PREV$`Valor Agregado Municipal (VA)`
+cuantitativas<-MUN_COL_PREV %>%   select( `Altitud media m,s,n,m`,`Temperatura °C`,`Valor Agregado Municipal (VA)` )
+
+```
+
+
+```{r}
+library(corrplot)
+
+
+M<-cor(cuantitativas, method = c("kendall"), use = "na.or.complete")
+corrplot(M, method = "color")
+
+```
+
+
+
+BASE COMPLETA DE MUNICIPIOS- (informacion mapas, informacion de variables, informacion casos por mes)
+
+```{r}
+municipios<-left_join(municipios,casos_mes2, by="COD_MUN")
+
+
+municipios <- municipios %>%  filter(COD_DEPT!= "88")
+
+
+```
+
+como hacer un cuadro de mapas. ??????
+
+```{r}
+ggplot(data = municipios) +
+  geom_sf(aes(fill = `2020_4`)) + 
+  scale_fill_gradient(low = "blue", high = "green", na.value = "gray90") +
+  labs(title = "Número de casos  de Covid en los Municipios de Colombia ", 
+           caption = "Datos: ", y = NULL, x = NULL)
+```
+
+
+#CORRELACION ESPACIAL
+
+```{r}
+library(maptools) 
+gpclibPermit()
+
+## (clases) para la representación de datos espaciales en el R
+require(sp)  
+## funciones de análisis de datos de área
+require(spdep)
+
+## funciones para facilitar la división de datos en clases por varios criterios
+
+require(classInt) 
+require(sf) 
+
+## funciones utilizadas para crear paletas de colores en visualización de mapas
+
+require(RColorBrewer)
+par.ori <- par(no.readonly=TRUE)
+
+
+```
+
+```{r}
+
+coords <- coordinates(as((municipios), 'Spatial'))
+rook_Col <- poly2nb(as(municipios, 'Spatial'), queen = FALSE)
+```
+
+```{r}
+nb_to_df <- function(nb, coords){
+  x <- coords[, 1]
+  y <- coords[, 2]
+  n <- length(nb)
+
+  cardnb <- card(nb)
+  i <- rep(1:n, cardnb)
+  j <- unlist(nb)
+  return(data.frame(x = x[i], xend = x[j],
+                    y = y[i], yend = y[j]))
+}
+```
+
+Torre
+
+```{r}
+
+rook_rook_Col_df <- nb_to_df(rook_Col, coords)
+```
+
+
+# estructura TORRE 
+
+```{r}
+ggplot(municipios) +
+  geom_sf()+
+  geom_point(data = rook_rook_Col_df,
+             mapping = aes(x = x, y = y))+
+  geom_segment(data = rook_rook_Col_df,
+               mapping = aes(x = x, xend = xend, y = y, yend = yend))+
+  labs(x = "",y = "")
+```
+
+Criterio Queen (de la Reina)
+
+```{r}
+queen_Col <- poly2nb(as(municipios, 'Spatial'), queen = T)
+
+queen_Col_df <- nb_to_df(queen_Col, coords)
+```
+
+```{r}
+ggplot(municipios) +
+  geom_sf()+
+  geom_point(data = queen_Col_df,
+             mapping = aes(x = x, y = y))+
+  geom_segment(data = queen_Col_df,
+               mapping = aes(x = x, xend = xend, y = y, yend = yend))+
+  labs(x = "", y = "")
+```
+
+```{r}
+kn_COL <- knn2nb(knearneigh(coords, k = 6))
+kn_COL_df <- nb_to_df(kn_COL,coords)
+
+ggplot(municipios) +
+  geom_sf()+
+  geom_point(data = kn_COL_df, mapping = aes(x = x, y = y))+
+  geom_segment(data = kn_COL_df,
+               mapping = aes(x = x, xend = xend, y = y, yend = yend))+
+  labs(x = "", y = "")
+
+
+```
+
+
+INDICE DE MORAN ESTRUCTURA REINA 
+
+
+```{r}
+queen_col_lw <- nb2listw(queen_Col, zero.policy = TRUE)
+
+moran.test(municipios$Densidad_incidencia_x10.000, listw = queen_col_lw, zero.policy = TRUE , alternative = "two.side")
+
+
+
+
+
+
+```
+
+INDICE DE MORAN ESTRUCTURA TORRE 
+
+```{r}
+rook_col_lw <- nb2listw(rook_Col, zero.policy = TRUE)
+
+moran.test(municipios$Densidad_incidencia_x10.000, listw = rook_col_lw, zero.policy = TRUE)
+
+```
+
+```{r}
+geary.test(municipios$Densidad_incidencia_x10.000, listw = queen_col_lw, zero.policy = TRUE , alternative = "two.side")
+```
+
+
+
+```{r}
+rm(cond_final)
+rm(Edad)
+rm(cond_final_mun)
+rm(basecovid)
+rm(casos_mun)
+rm(Sexo)
+rm(Sexo_mun)
+rm(datosmun)
+rm(casos_mes2)
 rm(Municipios_Excluidos_copia)
+
+```
+modelos 
+
+```{r}
+
+
+mod1 <- lm (Densidad_incidencia_x10.000 ~  `Altitud media m,s,n,m` + `Temperatura °C` +  `Valor Agregado Municipal (VA)` + Penetracion_Internet + Indice_Desempeño_Fiscal + `DIMENSION URBANA`  +`DIMENSIÓN ECONOMICA` + `DIMENSIÓN CALIDAD DE VIDA` +  `DIMENSIÓN INSTITUCIONAL` + IPM_MUN + NBI_Area_Urbana + NBI_Area_rural+ Población_condición_miseria + Afiliados_SGSSS + `poblacion_ rural` + poblacion_urbana + Cobertura_acueducto  + Cobertura_alcantarillado + Cobertura_bruta_educación +  Tasa_mortalidadGEN + personas_desplazadas_expulsadas + personas_desplazadas_recibidas  + personas_desplazadas + PRE_HTA + PRE_DM + PRE_ERC + Densidad_pob  , data = MUN_COL_PREV)
+
+summary(mod1)
+
+step(mod1)
+```
+
+```{r}
+mod2<- glm(Densidad_incidencia_x10.000 ~., family=poisson, data = MUN_COL_PREV)
+step(mod2)
+```
