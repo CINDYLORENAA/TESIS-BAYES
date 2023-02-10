@@ -1,4 +1,4 @@
----
+------
 title: "ANALISIS"
 author: "Lorena Albarracin Avila"
 date: "9/9/2022"
@@ -33,7 +33,8 @@ library(rgdal)
 library(rgeos)
 library(maptools)
 library (corrplot)
-
+library(carData)
+library(car)
 
 ```
 
@@ -79,15 +80,92 @@ seleccionar solo año 2020 y 2021, y municipios elegidos
 basecovid<-basecovid   %>% 
      filter(año %in% c("2020","2021"))  
 
-
-
 basecovid$ind <- ifelse(is.element(basecovid$`Código DIVIPOLA municipio`, c(27086,94663,88001,88564,91263,91405,91407,91430,91460,91530,91536,91669,91798,94343,94883,94884,94885,94886,94887,94888,97511,97777,97889)),0,1)
 
 basecovidfinal<-basecovid %>% 
-     filter(ind %in% c(1)) 
+     filter(ind %in% c(1))
+```
+
+## prueba  estructura largo 
+
+```{r}
 
 
 
+
+basecovidfinallarge<- basecovidfinal %>% select(`Fecha de notificación`, `Código DIVIPOLA departamento` , `Nombre departamento`,  `Código DIVIPOLA municipio`, `Nombre municipio` , Recuperado , `Fecha de diagnóstico`, `Fecha de recuperación`, `Fecha de muerte`, año ,  mes , ind  )
+
+basecovidfinallarge$añomuer <- as.numeric(format(basecovidfinallarge$`Fecha de muerte`,"%Y"))
+basecovidfinallarge$mesmuer <- as.numeric(format(basecovidfinallarge$`Fecha de muerte`,"%m"))
+
+basecovidfinallarge$añorec <- as.numeric(format(basecovidfinallarge$`Fecha de recuperación`,"%Y"))
+basecovidfinallarge$mesrec <- as.numeric(format(basecovidfinallarge$`Fecha de recuperación`,"%m"))
+
+
+basecovidfinallarge$ID_Periodo <- ifelse(basecovidfinallarge$año=="2020" & basecovidfinallarge$mes=="3", 1,
+         ifelse(basecovidfinallarge$año=="2020" & basecovidfinallarge$mes=="4", 2,
+         ifelse(basecovidfinallarge$año=="2020" & basecovidfinallarge$mes=="5", 3,
+         ifelse(basecovidfinallarge$año=="2020" & basecovidfinallarge$mes=="6", 4,       
+         ifelse(basecovidfinallarge$año=="2020" & basecovidfinallarge$mes=="7", 5,       
+         ifelse(basecovidfinallarge$año=="2020" & basecovidfinallarge$mes=="8", 6,       
+         ifelse(basecovidfinallarge$año=="2020" & basecovidfinallarge$mes=="9", 7,       
+         ifelse(basecovidfinallarge$año=="2020" & basecovidfinallarge$mes=="10", 8,       
+         ifelse(basecovidfinallarge$año=="2020" & basecovidfinallarge$mes=="11", 9,       
+         ifelse(basecovidfinallarge$año=="2020" & basecovidfinallarge$mes=="12", 10,
+         ifelse(basecovidfinallarge$año=="2021" & basecovidfinallarge$mes=="1", 11,
+          ifelse(basecovidfinallarge$año=="2021" & basecovidfinallarge$mes=="2", 12,
+          ifelse(basecovidfinallarge$año=="2021" & basecovidfinallarge$mes=="3", 13,      
+          ifelse(basecovidfinallarge$año=="2021" & basecovidfinallarge$mes=="4", 14,      
+          ifelse(basecovidfinallarge$año=="2021" & basecovidfinallarge$mes=="5", 15,
+          ifelse(basecovidfinallarge$año=="2021" & basecovidfinallarge$mes=="6", 16,
+                 ifelse(basecovidfinallarge$año=="2021" & basecovidfinallarge$mes=="7", 17,
+                        ifelse(basecovidfinallarge$año=="2021" & basecovidfinallarge$mes=="8", 18,
+                        ifelse(basecovidfinallarge$año=="2021" & basecovidfinallarge$mes=="9", 19,
+                        ifelse(basecovidfinallarge$año=="2021" & basecovidfinallarge$mes=="10", 20,
+                        ifelse(basecovidfinallarge$año=="2021" & basecovidfinallarge$mes=="11", 21,
+                               ifelse(basecovidfinallarge$año=="2021" & basecovidfinallarge$mes=="12", 22,  ifelse(basecovidfinallarge$año==""|basecovidfinallarge$mes=="", NA, 23))))))))))))))))))))))) 
+  
+
+
+Casos_Acum2<- basecovidfinallarge %>% select(ID_Periodo,`Código DIVIPOLA municipio`,  `Nombre municipio` , ind ) %>% group_by(`Código DIVIPOLA municipio`, ID_Periodo) %>% summarise(casos = sum(ind))
+
+Casos_Acum2<- mutate(Casos_Acum2, Casos_Acum = cumsum(casos))
+
+
+##%>% group_by(CodeM) %>% distinct()
+
+
+cond_finall <- basecovidfinallarge %>% select(ID_Periodo, `Código DIVIPOLA municipio`, Recuperado, ind ) %>% group_by(`Código DIVIPOLA municipio`, ID_Periodo)
+
+
+cond_finall[cond_finall=="fallecido"] <- "Fallecido"
+
+cond_finall$muerto <- (if_else(condition = cond_finall$Recuperado == "Fallecido", true = 1, false = 0))
+
+
+cond_finall$recuperado <- (if_else(condition = cond_finall$Recuperado == "Recuperado", true = 1, false = 0))
+
+Muertos<- cond_finall %>% group_by(`Código DIVIPOLA municipio`, ID_Periodo)%>% summarise(Muertos  = sum(muerto))
+
+Muertos<- mutate(Muertos, Muertos_Acum= cumsum(Muertos))
+
+Recuperados<- cond_finall %>% group_by(`Código DIVIPOLA municipio`, ID_Periodo)%>% summarise(Recuperados  = sum(recuperado))
+
+
+Recuperados<- mutate(Recuperados, Recuperados_Acum = cumsum(Recuperados))
+
+
+
+write.table(Casos_Covid_19_Combinado, "casosacum.xls")
+write.table(Muertos, "Muertos.xls")
+write.table(Recuperados, "Recuperados.xls")
+
+
+
+```
+
+
+```{r}
 basecovidfinal$Sexo[basecovidfinal$Sexo =="f"] <- "F"
 basecovidfinal$Sexo[basecovidfinal$Sexo =="m"] <- "M"
 
@@ -99,6 +177,7 @@ basecovidfinal$Edad_años <- round(if_else(condition = basecovidfinal$`Unidad de
 
 
 table1(~ Sexo + Edad_años + `Tipo de contagio`   | año, data=basecovidfinal, overall="Total")
+
 
 
 ```
@@ -220,7 +299,7 @@ datosmun<-basecovidfinal %>% group_by  (`Código DIVIPOLA municipio`, año) %>% 
 datosmunprueba<-basecovidfinal %>% group_by(`Fecha de diagnóstico`,`Nombre municipio`, `Código DIVIPOLA municipio`)%>% count(`Nombre municipio`)
 
 
-#datosmun = rename(datosmun, c(COD_MUN="Código DIVIPOLA municipio"))
+datosmun = rename(datosmun, c(COD_MUN="Código DIVIPOLA municipio"))
 datosmun = rename(datosmun, c(`Código DIVIPOLA municipio`="COD_MUN"))
 library(maditr)
 casos_mes2<- dcast(datosmun, COD_MUN ~ año + mes, value.var = "n")
@@ -233,7 +312,7 @@ casos_mes2<- dcast(datosmun, COD_MUN ~ año + mes, value.var = "n")
 casos acumulados por tiempo
 
 ```{r}
-Casos_acum<- basecovidfinal %>% select(`Fecha de diagnóstico`,`Código DIVIPOLA municipio`,  `Nombre municipio` , ind ) %>% group_by(`Fecha de diagnóstico`) %>% summarise(casos = sum(ind))
+Casos_acum<- basecovidfinal %>% select(`Fecha de diagnóstico`,`Código DIVIPOLA municipio`,  `Nombre municipio` , ind ) %>% group_by(`Código DIVIPOLA municipio`, `Fecha de diagnóstico`) %>% summarise(casos = sum(ind))
 
 Casos_acum<- mutate(Casos_acum, freq.acumulative = cumsum(casos))
 
@@ -815,18 +894,62 @@ shapiro.test(municipios$Tasa_letalidad_x10.000 )
 #Correlacion 
 
 ```{r}
-cortod <-MUN_COL_PREV %>%  select (Densidad_incidencia_x10.000, `Altitud media m,s,n,m`, `Superficie Km2`,`Temperatura °C` ,  `Valor Agregado Municipal (VA)` , Penetracion_Internet , Indice_Desempeño_Fiscal ,`DIMENSION URBANA`  ,`DIMENSIÓN ECONOMICA` , `DIMENSIÓN CALIDAD DE VIDA` ,  `DIMENSIÓN INSTITUCIONAL` , IPM_MUN , NBI_Area_Urbana , NBI_Area_rural, Población_condición_miseria , Afiliados_SGSSS , `poblacion_ rural` , poblacion_urbana , Cobertura_acueducto  , Cobertura_alcantarillado , Cobertura_bruta_educación ,  Tasa_mortalidadGEN , personas_desplazadas_expulsadas , personas_desplazadas_recibidas ,personas_desplazadas , PRE_HTA , PRE_DM , PRE_ERC , Densidad_pob  )
-
-
-
-corvar<- cor(cortod, method = c("kendall"), use = "na.or.complete")
- 
- 
+#mtcars %>% cor(method="pearson") %>% round(digits=2) -> cortod
+#mat_cor
 ```
+
+
+```{r}
+#cortod <-MUN_COL_PREV %>%  select ( `Altitud media m,s,n,m`,`Temperatura °C` ,  `Valor Agregado Municipal (VA)` , Penetracion_Internet , Indice_Desempeño_Fiscal ,`DIMENSION URBANA`  ,`DIMENSIÓN ECONOMICA` , `DIMENSIÓN CALIDAD DE VIDA` ,  `DIMENSIÓN INSTITUCIONAL` , IPM_MUN , NBI_Area_Urbana , NBI_Area_rural, Población_condición_miseria , Afiliados_SGSSS , `poblacion_ rural` , poblacion_urbana , Cobertura_acueducto  , Cobertura_alcantarillado , Cobertura_bruta_educación ,  Tasa_mortalidadGEN , personas_desplazadas_expulsadas , personas_desplazadas_recibidas ,personas_desplazadas , PRE_HTA , PRE_DM , PRE_ERC , Densidad_pob)
+
+
+MUN_COL_PREV$diciembre_porc_vac
+
+
+cortod <-MUN_COL_PREV %>%  select ( `Altitud media m,s,n,m`,   Penetracion_Internet , Indice_Desempeño_Fiscal ,   `DIMENSIÓN INSTITUCIONAL` , IPM_MUN , Afiliados_SGSSS , poblacion_urbana , Cobertura_bruta_educación ,  Tasa_mortalidadGEN , personas_desplazadas_expulsadas ,   PRE_DM , PRE_ERC , Densidad_pob, marzo_porc_vac, diciembre_porc_vac )
+
+
+corvar<- cor(cortod, method = c("spearman"), use = "na.or.complete")%>% round(digits=1)
+
+```
+
+
+```{r}
+glm1<-lm(Densidad_incidencia_x10.000~ `Altitud media m,s,n,m` + `Temperatura °C` ,data=MUN_COL_PREV)
+options(scipen = 9990) 
+vif(glm1)
+```
+
+correlacion de altitud y temperatura: -0.9 dado que la altitud es mas estable se excluye temperatura 
+
+dimension economica y valor agregado municipal 0.9. , dado que la dimension economica tiene informacion de 2014 se excluye, se deja la informacion de valor agregado 
+
+Afiliados_SGSSS y valor agregado municipal  0.7, teniendo en cuenta la relacion con salud se excluye el valor agregado municipal
+
+Afiliados_SGSSS Y  Número acumulado de personas desplazadas recibidas 0,8,  teniendo en cuenta la relacion con salud se excluye  Número acumulado de personas desplazadas recibidas fuente 2017.
+
+se excluye DIMENSION URBANA: poblacion_ rural -0.8   poblacion_urbana 0.8, la informacion de dimension urbana es del 2014, por tanto se deja poblacion 
+
+
+IPM y dimension calidad de vida -0.9 ; dimension calidad de vida y Población_condición_miseria 0.6; se excluye  dimension calidad de vida fuente 2014.
+
+
+
+IPM: NBI_Area_Urbana 0,7; NBI_Area_rural 0,8; Población_condición_miseria 0,8. 
+
+
+IPM Cobertura_acueducto - Cobertura_alcantarillado -0.7 
+
+
+Número de personas desplazadas y Número acumulado de personas desplazadas expulsadas 0.8 se excluye desplazadas por que tiene 365 municipios con cero 0
+
+Prevalencia de hipertension y diabetes 0.8 , se escluye HTA 
+
 
 
 
 BASE COMPLETA DE MUNICIPIOS- (informacion mapas, informacion de variables, informacion casos por mes)
+
 
 ```{r}
 municipios<-left_join(municipios,casos_mes2, by="COD_MUN")
@@ -837,196 +960,8 @@ municipios <- municipios %>%  filter(COD_DEPT!= "88")
 
 ```
 
-como hacer un cuadro de mapas. ??????
 
-```{r}
-ggplot(data = municipios) +
-  geom_sf(aes(fill = `2020_4`)) + 
-  scale_fill_gradient(low = "blue", high = "green", na.value = "gray90") +
-  labs(title = "Número de casos  de Covid en los Municipios de Colombia ", 
-           caption = "Datos: ", y = NULL, x = NULL)
-```
-
-
-#CORRELACION ESPACIAL
-
-```{r}
-library(maptools) 
-gpclibPermit()
-
-## (clases) para la representación de datos espaciales en el R
-require(sp)  
-## funciones de análisis de datos de área
-require(spdep)
-
-## funciones para facilitar la división de datos en clases por varios criterios
-
-require(classInt) 
-require(sf) 
-
-## funciones utilizadas para crear paletas de colores en visualización de mapas
-
-require(RColorBrewer)
-par.ori <- par(no.readonly=TRUE)
-
-
-```
-
-```{r}
-
-coords <- coordinates(as((municipios), 'Spatial'))
-rook_Col <- poly2nb(as(municipios, 'Spatial'), queen = FALSE)
-```
-
-```{r}
-nb_to_df <- function(nb, coords){
-  x <- coords[, 1]
-  y <- coords[, 2]
-  n <- length(nb)
-
-  cardnb <- card(nb)
-  i <- rep(1:n, cardnb)
-  j <- unlist(nb)
-  return(data.frame(x = x[i], xend = x[j],
-                    y = y[i], yend = y[j]))
-}
-```
-
-Torre
-
-```{r}
-
-rook_rook_Col_df <- nb_to_df(rook_Col, coords)
-```
-
-
-# estructura TORRE 
-
-```{r}
-ggplot(municipios) +
-  geom_sf()+
-  geom_point(data = rook_rook_Col_df,
-             mapping = aes(x = x, y = y))+
-  geom_segment(data = rook_rook_Col_df,
-               mapping = aes(x = x, xend = xend, y = y, yend = yend))+
-  labs(x = "",y = "")
-```
-
-Criterio Queen (de la Reina)
-
-```{r}
-queen_Col <- poly2nb(as(municipios, 'Spatial'), queen = T)
-
-queen_Col_df <- nb_to_df(queen_Col, coords)
-```
-
-```{r}
-ggplot(municipios) +
-  geom_sf()+
-  geom_point(data = queen_Col_df,
-             mapping = aes(x = x, y = y))+
-  geom_segment(data = queen_Col_df,
-               mapping = aes(x = x, xend = xend, y = y, yend = yend))+
-  labs(x = "", y = "")
-```
-
-```{r}
-kn_COL <- knn2nb(knearneigh(coords, k = 6))
-kn_COL_df <- nb_to_df(kn_COL,coords)
-
-ggplot(municipios) +
-  geom_sf()+
-  geom_point(data = kn_COL_df, mapping = aes(x = x, y = y))+
-  geom_segment(data = kn_COL_df,
-               mapping = aes(x = x, xend = xend, y = y, yend = yend))+
-  labs(x = "", y = "")
-
-
-```
-
-
-INDICE DE MORAN ESTRUCTURA REINA 
-
-
-```{r}
-queen_col_lw <- nb2listw(queen_Col, zero.policy = TRUE)
-#global
-
-moran.test(municipios$Densidad_incidencia_x10.000, listw = queen_col_lw, zero.policy = TRUE , alternative = "two.side")
-
-
-
-
-
-
-```
-
-INDICE DE MORAN ESTRUCTURA TORRE 
-
-```{r}
-rook_col_lw <- nb2listw(rook_Col, zero.policy = TRUE)
-
-moran.test(municipios$Densidad_incidencia_x10.000, listw = rook_col_lw, zero.policy = TRUE)
-
-```
-
-```{r}
-geary.test(municipios$Densidad_incidencia_x10.000, listw = queen_col_lw, zero.policy = TRUE , alternative = "two.side")
-```
-
-
-
-```{r}
-rm(cond_final)
-rm(Edad)
-rm(cond_final_mun)
-rm(basecovid)
-rm(casos_mun)
-rm(Sexo)
-rm(Sexo_mun)
-rm(datosmun)
-rm(casos_mes2)
-rm(Municipios_Excluidos_copia)
-
-```
 #modelos
-
-MODELO LINEAL
-
-```{r}
-
-
-
-mod1 <- lm (Densidad_incidencia_x10.000 ~  `Altitud media m,s,n,m` + `Superficie Km2`+Aeropuerto_Nal+ Aeropuerto_Inal +`Temperatura °C` +  `Valor Agregado Municipal (VA)` + Penetracion_Internet + Indice_Desempeño_Fiscal + `DIMENSION URBANA`  +`DIMENSIÓN ECONOMICA` + `DIMENSIÓN CALIDAD DE VIDA` +  `DIMENSIÓN INSTITUCIONAL` + IPM_MUN + NBI_Area_Urbana + NBI_Area_rural+ Población_condición_miseria + Afiliados_SGSSS + `poblacion_ rural` + poblacion_urbana + Cobertura_acueducto  + Cobertura_alcantarillado + Cobertura_bruta_educación +  Tasa_mortalidadGEN + personas_desplazadas_expulsadas + personas_desplazadas_recibidas  + personas_desplazadas + PRE_HTA + PRE_DM + PRE_ERC + Densidad_pob  , data = MUN_COL_PREV)
-
-summary(mod1)
-step(mod1)
-
-# modelo significativo
-
-mod1s <- lm (Densidad_incidencia_x10.000 ~    Penetracion_Internet +  `DIMENSION URBANA`  + `DIMENSIÓN CALIDAD DE VIDA`  + IPM_MUN +  `poblacion_ rural` +    Cobertura_bruta_educación +   personas_desplazadas_expulsadas   + PRE_ERC + Densidad_pob +  I (Densidad_pob ^ 2) , data = MUN_COL_PREV)
-
-summary(mod1s)
-
-anova(mod1,mod1s)
-
-# modelo step
-
-
-mod1step <- lm (Densidad_incidencia_x10.000 ~  
-    Aeropuerto_Nal + `Altitud media m,s,n,m` + Penetracion_Internet + 
-    Indice_Desempeño_Fiscal + `DIMENSION URBANA` + `DIMENSIÓN CALIDAD DE VIDA` + 
-    `DIMENSIÓN INSTITUCIONAL` + IPM_MUN + NBI_Area_rural + Afiliados_SGSSS + 
-    `poblacion_ rural` + poblacion_urbana + Cobertura_acueducto + 
-    Cobertura_bruta_educación + Tasa_mortalidadGEN + personas_desplazadas_expulsadas + 
-    personas_desplazadas_recibidas + personas_desplazadas + PRE_ERC + 
-    Densidad_pob  , data = MUN_COL_PREV)
-
-summary(mod1step)
-
-anova(mod1s,mod1step)
-
-```
 
 
 
@@ -1035,66 +970,35 @@ anova(mod1s,mod1step)
 
 ```{r}
 
+mod1<- glm(Densidad_incidencia_x10.000 ~   Aeropuerto_Nal +`Altitud media m,s,n,m`+   Penetracion_Internet + Indice_Desempeño_Fiscal +  `DIMENSIÓN INSTITUCIONAL` + IPM_MUN + Afiliados_SGSSS + poblacion_urbana + Cobertura_bruta_educación + Tasa_mortalidadGEN + personas_desplazadas_expulsadas +   PRE_DM + PRE_ERC + Densidad_pob+ I(Densidad_pob^2) , data = MUN_COL_PREV)
+
+summary(mod1)
 
 
-mod2<- glm(  Total_casos~ `Altitud media m,s,n,m` + `Temperatura °C` + 
-    `Valor Agregado Municipal (VA)` + Penetracion_Internet + 
-    Indice_Desempeño_Fiscal + `DIMENSION URBANA` + `DIMENSIÓN ECONOMICA` + 
-    `DIMENSIÓN CALIDAD DE VIDA` + `DIMENSIÓN INSTITUCIONAL` + 
-    IPM_MUN + NBI_Area_Urbana + NBI_Area_rural + Población_condición_miseria + 
-    Afiliados_SGSSS + `poblacion_ rural`  + 
-    Cobertura_acueducto + Cobertura_alcantarillado + Cobertura_bruta_educación + 
-    Tasa_mortalidadGEN + personas_desplazadas_expulsadas + personas_desplazadas_recibidas + 
-    personas_desplazadas + PRE_HTA + PRE_DM + PRE_ERC + Densidad_pob + offset(log(POB_Total_2020)), family=poisson, data = MUN_COL_PREV)
-
-
-summary(mod2)
-
-
-step(mod2)
-
-
-
-
-mod2s<- glm(Densidad_incidencia_x10.000 ~   `Superficie Km2` + Penetracion_Internet +  `DIMENSION URBANA`  + `DIMENSIÓN CALIDAD DE VIDA`  + IPM_MUN +  `poblacion_ rural` +    Cobertura_bruta_educación +   personas_desplazadas_expulsadas   + PRE_ERC + Densidad_pob + I(Densidad_pob^2) , data = MUN_COL_PREV)
+mod2s<- glm(Densidad_incidencia_x10.000 ~   Aeropuerto_Nal +`Altitud media m,s,n,m`+   Penetracion_Internet + Indice_Desempeño_Fiscal +  IPM_MUN + Afiliados_SGSSS + poblacion_urbana + Cobertura_bruta_educación + Tasa_mortalidadGEN + personas_desplazadas_expulsadas +  PRE_ERC + Densidad_pob+ I(Densidad_pob^2) , data = MUN_COL_PREV)
 
 summary(mod2s)
 
-
-
-anova(mod2,mod2s)
+anova(mod1,mod2s)
 
 
 
 
-mod2depurado<- glm(  Total_casos~ Penetracion_Internet +  `DIMENSION URBANA`  + `DIMENSIÓN CALIDAD DE VIDA`  + IPM_MUN +  `poblacion_ rural` +    Cobertura_bruta_educación +   personas_desplazadas_expulsadas   + PRE_ERC   +  I (Densidad_pob ^ 2) + offset(log(POB_Total_2020)), family=poisson, data = MUN_COL_PREV)
+mod2depurado<- glm(  Total_casos~ Aeropuerto_Nal +`Altitud media m,s,n,m`+   Penetracion_Internet + Indice_Desempeño_Fiscal +  `DIMENSIÓN INSTITUCIONAL` + IPM_MUN + Afiliados_SGSSS + poblacion_urbana + Cobertura_bruta_educación + Tasa_mortalidadGEN + personas_desplazadas_expulsadas +   PRE_DM + PRE_ERC + Densidad_pob   +  I (Densidad_pob ^ 2) + offset(log(POB_Total_2020)), family=poisson, data = MUN_COL_PREV)
 
 summary(mod2depurado)
 
-
-mod2STEP<- glm(  Total_casos~ Aeropuerto_Nal + `Altitud media m,s,n,m`  + Penetracion_Internet +  Indice_Desempeño_Fiscal + `DIMENSION URBANA` + `DIMENSIÓN CALIDAD DE VIDA` +     `DIMENSIÓN INSTITUCIONAL` + IPM_MUN + NBI_Area_rural + Afiliados_SGSSS +     `poblacion_ rural`  + Cobertura_acueducto + 
-    Cobertura_bruta_educación + Tasa_mortalidadGEN +personas_desplazadas_expulsadas +personas_desplazadas_recibidas + PRE_ERC + 
-    Densidad_pob   +  I (Densidad_pob ^ 2) + offset(log(POB_Total_2020)), family=poisson, data = MUN_COL_PREV)
-
-summary(mod2STEP)
  
-    
 ```
+
+
 
 
 
 
 #REVISION DESCRIPTIVA DE VARIABLES PARA INCLUIR EN EL MODELO 
 
-glm(formula = Total_casos ~ Aeropuerto_Nal + `Altitud media m,s,n,m` + 
-    Penetracion_Internet + Indice_Desempeño_Fiscal + `DIMENSION URBANA` + 
-    `DIMENSIÓN CALIDAD DE VIDA` + `DIMENSIÓN INSTITUCIONAL` + 
-    IPM_MUN + NBI_Area_rural + Afiliados_SGSSS + `poblacion_ rural` + 
-    Cobertura_acueducto + Cobertura_bruta_educación + Tasa_mortalidadGEN + 
-    personas_desplazadas_expulsadas + personas_desplazadas_recibidas + 
-    personas_desplazadas + PRE_ERC + Densidad_pob + CATDENPOB + 
-    I(Densidad_pob^2) + offset(log(POB_Total_2020)), family = poisson, 
-    data = MUN_COL_PREV)
+Aeropuerto_Nal +`Altitud media m,s,n,m`+   Penetracion_Internet + Indice_Desempeño_Fiscal +  IPM_MUN + Afiliados_SGSSS + poblacion_urbana + Cobertura_bruta_educación + Tasa_mortalidadGEN + personas_desplazadas_expulsadas +  PRE_ERC + Densidad_pob+
 
 
 `Altitud media m,s,n,m` 
@@ -1144,53 +1048,8 @@ table1(~ Densidad_incidencia_x10.000| CATPINT,data = MUN_COL_PREV,
 
 ```
 
-** `DIMENSION URBANA` Indicador de 0 a 1 donde 0 representa al municipio en Colombia con la menor dinámica urbana y 1 al municipio con la mayor
 
 
-```{r}
-
-xdimur=unique(quantile(MUN_COL_PREV$`DIMENSION URBANA`,0:10/10))
-
-MUN_COL_PREV$DIMCAT<-   cut(x = MUN_COL_PREV$`DIMENSION URBANA`, breaks = xdimur,labels = xdimur[-1])
-
-
-
-table1(~ Densidad_incidencia_x10.000| DIMCAT,data = MUN_COL_PREV, 
-       rowlabelhead = "Variables",
-       caption = "`DIMENSION URBANA`",
-       footnote = "Fuente: ''",
-       overall = "General"       )
-
-
-
-                             
-
-plot(MUN_COL_PREV$DIMCAT, MUN_COL_PREV$Densidad_incidencia_x10.000)
-
-```
-
-
-
-***`DIMENSIÓN CALIDAD DE VIDA` Indicador de 0 a 1 donde 0 representa al municipio en Colombia con las peores condiciones de calidad de vida en el promedio de sus habitantes y 1 al municipio con las mejores
-
-
-```{r}
-
-xcv=unique(quantile(MUN_COL_PREV$`DIMENSIÓN CALIDAD DE VIDA`,0:10/10))
-
-MUN_COL_PREV$DIMCVCAT<-   cut(x = MUN_COL_PREV$`DIMENSIÓN CALIDAD DE VIDA`, breaks = xcv,labels = xcv[-1])
-
-
-table1(~ Densidad_incidencia_x10.000| DIMCVCAT,data = MUN_COL_PREV, 
-       rowlabelhead = "Variables",
-       caption = "`DIMENSIÓN CALIDAD DE VIDA`",
-       footnote = "Fuente: ''",
-       overall = "General"       )
-
-
-
-plot(MUN_COL_PREV$DIMCVCAT, MUN_COL_PREV$Densidad_incidencia_x10.000)
-```
 
 
 ** IPM_MUN Incidencia de la pobreza según índice de la pobreza multidimensional
@@ -1213,27 +1072,6 @@ plot(MUN_COL_PREV$CATIPM_MUN, MUN_COL_PREV$Densidad_incidencia_x10.000)
 ```
 
 
-`poblacion_ rural` Porcentaje (el valor está multiplicado por 100)
-
-```{r}
-
-xpru=unique(quantile(MUN_COL_PREV$`poblacion_ rural`,0:10/10))
-
-MUN_COL_PREV$CATPR<-   cut(x = MUN_COL_PREV$`poblacion_ rural`, breaks = xpru,labels = xpru[-1])
-
-
-table1(~ Densidad_incidencia_x10.000| CATPR,data = MUN_COL_PREV, 
-       rowlabelhead = "Variables",
-       caption = "`poblacion_ rural`",
-       footnote = "Fuente: ''",
-       overall = "General"       )
-
-
-               
-
-plot(MUN_COL_PREV$CATPR, MUN_COL_PREV$Densidad_incidencia_x10.000)
-
-```
 
 **Cobertura_bruta_educación Porcentaje (el valor está multiplicado por 100)
 
@@ -1383,3 +1221,228 @@ plot(MUN_COL_PREV$CATTASMOR, MUN_COL_PREV$Densidad_incidencia_x10.000)
 
 ```
   
+  
+  
+  
+  
+  
+  #CORRELACION ESPACIAL
+
+```{r}
+library(maptools) 
+gpclibPermit()
+
+## (clases) para la representación de datos espaciales en el R
+require(sp)  
+## funciones de análisis de datos de área
+require(spdep)
+
+## funciones para facilitar la división de datos en clases por varios criterios
+
+require(classInt) 
+require(sf) 
+
+## funciones utilizadas para crear paletas de colores en visualización de mapas
+
+require(RColorBrewer)
+par.ori <- par(no.readonly=TRUE)
+
+
+```
+
+```{r}
+
+coords <- coordinates(as((municipios), 'Spatial'))
+rook_Col <- poly2nb(as(municipios, 'Spatial'), queen = FALSE)
+```
+
+```{r}
+nb_to_df <- function(nb, coords){
+  x <- coords[, 1]
+  y <- coords[, 2]
+  n <- length(nb)
+
+  cardnb <- card(nb)
+  i <- rep(1:n, cardnb)
+  j <- unlist(nb)
+  return(data.frame(x = x[i], xend = x[j],
+                    y = y[i], yend = y[j]))
+}
+```
+
+Torre
+
+```{r}
+
+rook_rook_Col_df <- nb_to_df(rook_Col, coords)
+```
+
+
+# estructura TORRE 
+
+```{r}
+ggplot(municipios) +
+  geom_sf()+
+  geom_point(data = rook_rook_Col_df,
+             mapping = aes(x = x, y = y))+
+  geom_segment(data = rook_rook_Col_df,
+               mapping = aes(x = x, xend = xend, y = y, yend = yend))+
+  labs(x = "",y = "")
+```
+
+Criterio Queen (de la Reina)
+
+```{r}
+queen_Col <- poly2nb(as(municipios, 'Spatial'), queen = T)
+
+queen_Col_df <- nb_to_df(queen_Col, coords)
+```
+
+```{r}
+ggplot(municipios) +
+  geom_sf()+
+  geom_point(data = queen_Col_df,
+             mapping = aes(x = x, y = y))+
+  geom_segment(data = queen_Col_df,
+               mapping = aes(x = x, xend = xend, y = y, yend = yend))+
+  labs(x = "", y = "")
+```
+
+```{r}
+kn_COL <- knn2nb(knearneigh(coords, k = 6))
+kn_COL_df <- nb_to_df(kn_COL,coords)
+
+ggplot(municipios) +
+  geom_sf()+
+  geom_point(data = kn_COL_df, mapping = aes(x = x, y = y))+
+  geom_segment(data = kn_COL_df,
+               mapping = aes(x = x, xend = xend, y = y, yend = yend))+
+  labs(x = "", y = "")
+
+
+```
+
+
+INDICE DE MORAN ESTRUCTURA REINA 
+
+
+```{r}
+queen_col_lw <- nb2listw(queen_Col, zero.policy = TRUE)
+#global
+
+moran.test(municipios$Densidad_incidencia_x10.000, listw = queen_col_lw, zero.policy = TRUE , alternative = "two.side")
+
+
+
+
+
+
+```
+
+INDICE DE MORAN ESTRUCTURA TORRE 
+
+```{r}
+rook_col_lw <- nb2listw(rook_Col, zero.policy = TRUE)
+
+moran.test(municipios$Densidad_incidencia_x10.000, listw = rook_col_lw, zero.policy = TRUE)
+
+```
+
+```{r}
+geary.test(municipios$Densidad_incidencia_x10.000, listw = queen_col_lw, zero.policy = TRUE , alternative = "two.side")
+```
+
+
+como hacer un cuadro de mapas. ??????
+
+```{r}
+ggplot(data = municipios) +
+  geom_sf(aes(fill = `2020_4`)) + 
+  scale_fill_gradient(low = "blue", high = "green", na.value = "gray90") +
+  labs(title = "Número de casos  de Covid en los Municipios de Colombia ", 
+           caption = "Datos: ", y = NULL, x = NULL)
+```
+
+
+
+
+```{r}
+(cond_final)
+rm(Edad)
+rm(cond_final_mun)
+rm(basecovid)
+rm(casos_mun)
+rm(Sexo)
+rm(Sexo_mun)
+rm(datosmun)
+rm(casos_mes2)
+rm(Municipios_Excluidos_copia)
+
+```
+
+
+
+## INTERACCION ESPACIO TEMPORAL 
+
+```{r}
+library(spdep)
+library(rgdal)
+library(readxl)
+library(RColorBrewer)
+library(classInt)
+library(maptools)
+library(tidyverse)
+library(lubridate)
+library(pgirmess)
+library(quantmod)
+library(ggplot2)
+library(astsa)
+library(shiny)
+library(readr)
+library(leaflet)
+library(ggplot2)
+library(dplyr)
+library(INLA)
+require(splancs)
+require(sp)
+require(fields)
+require(lattice)
+require(abind)
+
+
+
+```
+
+
+```{r}
+# Leer datos
+
+library(maptools)
+
+col.gen <-  readShapePoly("fuentes/mpio2/Munpio.shp")
+temp <- poly2nb(col.gen)
+nb2INLA("col.graph", temp)
+col.adj <- paste(getwd(),"/col.graph",sep="")
+
+library(inla.read.graph)
+
+H <- inla.read.graph(filename="col.graph")
+image(inla.graph2matrix(H),xlab="",ylab="")
+
+
+##debo especificar a y??
+
+formula <- Densidad_incidencia_x10.000 ~ 1 + f(ID, model="bym",graph=col.adj)
+
+mod.suicides <- inla(formula,family="poisson",
+data=MUN_COL_PREV,E=E,
+control.compute=list(dic=TRUE))
+
+
+mod.intI_P_C <- inla(formula.intI_C,family="poisson",data=Casos_Covid_19_Combinado,
+                     E=Casos_Covid_19_Combinado$Pob, control.predictor = list(link=Link),
+                     control.compute=list(dic=TRUE,cpo=TRUE,waic=TRUE))
+
+```
+
+
