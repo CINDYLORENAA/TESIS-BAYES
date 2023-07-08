@@ -1,0 +1,511 @@
+---
+title: "v2.interaccioncc"
+author: "Lorena Albarracin Avila"
+date: "2023-02-22"
+output: html_document
+---
+
+```{r}
+
+require(INLA)
+require(gstat)
+require(geoR)
+require(fields)
+require(maptools)
+require(lattice)
+require(spdep)
+library(readr)
+library(readxl)
+#install.packages("shiny")
+#library(shiny)
+#install.packages("leaflet")
+#library(leaflet)
+library(dplyr)
+require(splancs)
+require(sp)
+require(abind)
+library(RColorBrewer)
+library(rgdal)
+library(classInt)
+library(tidyverse)
+library(lubridate)
+library(pgirmess)
+library(quantmod)
+library(ggplot2)
+library(astsa)
+
+
+
+remove(list=ls())
+
+```
+
+
+
+# Leer datos
+```{r}
+Casos <- read_excel("D:/MAESTRIA BIOESTADISITICA/TESIS/BASE DE DATOS/TESIS/data/Casos_Covid_19_Combinado.xlsx")
+data <- read_excel("D:/MAESTRIA BIOESTADISITICA/TESIS/BASE DE DATOS/TESIS/data/data.xlsx")
+```
+
+
+Antes de ejecutar este modelo, necesitamos especificar un gráfico que asigne el conjunto de vecinos de cada municipio. Primero, necesitamos cargar el archivo de forma, a través de la función readShapePoly del paquete maptools
+
+
+6.1 MODELO  BYM 
+
+```{r}
+Colombia.gen <- readShapePoly("D:/MAESTRIA BIOESTADISITICA/TESIS/BASE DE DATOS/TESIS/fuentes/mpio2/Munpio.shp") #london.gen
+Colombia <- readOGR("D:/MAESTRIA BIOESTADISITICA/TESIS/BASE DE DATOS/TESIS/fuentes/mpio2/Munpio.shp")
+
+Colombia.gen <- Colombia.gen[-c(3, 4, 5, 6, 7, 8, 9, 11, 12, 19, 38, 84, 109, 136, 140, 145, 170, 187, 219, 225, 1120, 1121),]
+
+```
+Usamos las funciones poly2nb y nb2INLA del paquete spdep para transformar el archivo de forma en una matriz de adyacencia y hacerlo compatible con el formato R-INLA
+
+```{r}
+temp<- poly2nb(Colombia.gen) ##es el temp en cameleti (temp <- poly2nb(london.gen))
+nb2INLA("COVID.graph",temp)  ## nb2INLA("LDN.graph", temp)
+Colombia_Covid.adj <- paste(getwd(),"/COVID.graph",sep="")   ### LDN.adj <- paste(getwd(),"/LDN.graph",sep="")
+
+```
+
+Ahora tenemos un archivo llamado COVID.graph almacenado en el directorio de trabajo actual que está en el formato adecuado para ser leído por R-INLA. El último comando crea un objeto (Colombia_Covid.adj) con la ubicación del gráfico.
+ Se puede importar un gráfico en R-INLA usando la función inla.read.graph y de esto también se puede obtener la matriz de adyacencia a través de *h*
+
+```{r}
+H <- inla.read.graph(filename="COVID.graph")
+image(inla.graph2matrix(H),xlab="",ylab="")
+```
+
+
+```{r}
+formula <- y ~ 1 + f(ID, model="bym",graph=Colombia_Covid.adj, scale.model=TRUE,
+          hyper=list(prec.unstruct=list(prior="loggamma",param=c(1,0.001)), prec.spatial=list(prior="loggamma",param=c(1,0.001))))
+```
+
+
+```{r}
+Nareas <- length(data[,1])
+
+# El orden de las áreas debe ser el mismo entre los datos y el objeto de polígono espacial obtenido al importar el archivo de forma, por lo que reordenamos los datos
+
+data.boroughs <- attr(Colombia.gen, "data")
+order <- match(data.boroughs$MpCodigo,data$Cod_DIVIPOLAtxt)
+data <- data[order,]
+data$ID2 <- seq(1,Nareas)
+# Incluya en el marco de datos london.gen la variable ID 1:32 (porque SP_Id es 0:31)
+attr(Colombia.gen, "data") <- merge(data.boroughs,data,by.x="MpCodigo", by.y="Cod_DIVIPOLAtxt")
+
+```
+ 
+```{r}
+mod.suicides <- inla(formula,family="poisson",
+              data=data,E=E,
+              control.compute=list(dic=TRUE))
+```
+En este caso, los parámetros estimados por R-INLA están representados por 𝜽 = {b0, 𝝃, u} y los hiperparámetros vienen dados por las precisiones 𝝍 = {𝜏u, 𝜏 
+ #  𝑣}. Información de resumen (por ejemplo, la media posterior y la desviación estándar, junto con un 95% intervalo de credibilidad) se puede obtener para cada componente de 𝜽 y 𝝍. En particular, 
+para los llamados efectos fijos (b0, en este caso) y para los efectos aleatorios (ie 𝝃 yu) esto se puede obtener tecleando 
+
+
+```{r}
+round(mod.suicides$summary.fixed,3) 
+round(head(mod.suicides$summary.random$ID),3) #partial output
+```
+
+Este último es un marco de datos formado por 2n filas: las primeras n filas incluyen información 
+sobre los residuos específicos del área ..i, que son el principal interés en el mapeo de una enfermedad 
+estudio, mientras que el resto presenta información sobre la estructura residual espacialmente estructurada.
+ui solamente 
+
+Recuerde que todos estos parámetros están en la escala logarítmica; 
+Para el En aras de la interpretabilidad, sería más conveniente transformarlos 
+de nuevo a la escala natural. Para calcular la media posterior y el intervalo de credibilidad 
+del 95 % para el efecto fijob0 en la escala original, escribimos 
+
+```{r}
+exp.b0.mean <- inla.emarginal(exp,mod.suicides$marginals.fixed[[1]])
+exp.b0.mean
+exp.b0.95CI <- inla.qmarginal(c(0.025,0.975), inla.tmarginal(exp,mod.suicides$marginals.fixed[[1]]))
+exp.b0.95CI
+```
+
+el cálculo de la media posterior de los efectos aleatorios 𝝃 se realiza en dos 
+pasos ya que tenemos más de un parámetro:  
+
+Primero, extraemos la distribución posterior marginal para cada elemento de .. y
+luego aplicar la transformación exponencial y calcular la media posterior 
+para cada uno de usando la función lapply.
+
+```{r}
+##Código para la figura 6.6 a la izquierda
+csi <- mod.suicides$marginals.random$ID[1:Nareas]
+
+zeta <- lapply(csi,function(x) inla.emarginal(exp,x))
+```
+
+```{r}
+# Definir el corte para zeta
+zeta.cutoff <- c(0.6, 0.9, 1.0, 1.1, 1.8)
+# Transformar zeta en variable categórica
+cat.zeta <- cut(unlist(zeta),breaks=zeta.cutoff,include.lowest=TRUE)
+# Cree un marco de datos con toda la información necesaria para el mapa
+maps.cat.zeta <- data.frame(ID=data$ID, cat.zeta=cat.zeta)
+# Agregar la zeta categorizada al polígono espacial
+data.boroughs <- attr(Colombia.gen, "data")
+attr(Colombia.gen, "data") <- merge(data.boroughs, maps.cat.zeta, by="ID")
+```
+
+```{r}
+trellis.par.set(axis.line=list(col=NA))
+spplot(obj=Colombia.gen, zcol= "cat.zeta", col.regions=gray(seq(0.9,0.1,length=4)), asp=1)
+```
+
+
+
+
+
+```{r}
+# *** Código para la figura 6.6 a la derecha
+a <- 0
+prob.csi <- lapply(csi, function(x) {1 - inla.pmarginal(a, x)})
+prob.csi.cutoff <- c(0,0.2,0.8,1)
+cat.prob.csi <- cut(unlist(prob.csi),breaks=prob.csi.cutoff, include.lowest=TRUE)
+maps.cat.prob.csi <- data.frame(ID=data$ID, cat.prob.csi=cat.prob.csi)
+data.boroughs <- attr(Colombia.gen, "data")
+attr(Colombia.gen, "data") <- merge(data.boroughs, maps.cat.prob.csi, by="ID")
+
+spplot(obj=Colombia.gen, zcol= "cat.prob.csi", col.regions=gray(seq(0.9,0.1,length=3)))
+```
+evaluar la proporción de la varianza explicada por el componente espacial estructurado. La cantidad SIGMA 2 u es la varianza del condicional especificación autorregresiva, mientras que 𝜎2 𝑣 es la varianza de la marginal no estructurada componente. Por lo tanto, los dos no son directamente comparables. Sin embargo, es posible obtener empíricamente una estimación de la varianza marginal posterior para el modelo estructurado
+efecto a través
+
+
+```{r}
+mat.marg <- matrix(NA, nrow=Nareas, ncol=100000)
+m <- mod.suicides$marginals.random$ID
+for (i in 1:Nareas){
+  # Remember that the first Nareas values of the random effects
+  # are u+v, while u values are stored in the Nareas+1 to 2*Nareas elements.
+  u <- m[[Nareas+i]]
+  mat.marg[i,] <- inla.rmarginal(100000, u)
+}
+var.u <- apply(mat.marg, 2, var)
+
+var.v <- inla.rmarginal(100000,inla.tmarginal(function(x) 1/x,
+          mod.suicides$marginals.hyper$"Precision for ID (iid component)"))
+perc.var.u <- mean(var.u/(var.u+var.v))
+perc.var.u
+
+marg.hyper <- inla.hyperpar.sample(100000,mod.suicides)
+perc.var.u1 <- mean(marg.hyper[,1] / (marg.hyper[,1]+marg.hyper[,2]))
+perc.var.u1
+```
+
+7. MODELO ESPACIO-TEMPORAL
+
+7.1 Mapeo espacio-temporal de enfermedades
+
+#Tendencia paramétrica 
+```{r}
+remove(list=ls())
+```
+
+```{r}
+data <- read_excel("D:/MAESTRIA BIOESTADISITICA/TESIS/BASE DE DATOS/TESIS/data/data.xlsx")
+ohio <- readShapePoly("D:/MAESTRIA BIOESTADISITICA/TESIS/BASE DE DATOS/TESIS/fuentes/mpio2/Munpio.shp")
+ohio<- ohio[-c(3, 4, 5, 6, 7, 8, 9, 11, 12, 19, 38, 84, 109, 136, 140, 145, 170, 187, 219, 225, 1120, 1121),]
+county1 <- data$ID.area
+county <- county1
+
+data1<- scale(data[,c("Afiliados_SGSSS", "poblacion_urbana" , "personas_desplazadas_expulsadas",  "Vacunas" )], center = TRUE, scale = TRUE)
+data<- data.frame(data, data1)
+
+
+temp<- poly2nb(ohio ) ##es el temp en cameleti (temp <- poly2nb(london.gen))
+nb2INLA("COVID.graph",temp)  ## nb2INLA("LDN.graph", temp)
+Ohio.adj<- paste(getwd(),"/COVID.graph",sep="")   ### LDN.adj <- paste(getwd(),"/LDN.graph",sep="")
+
+# Afiliados_SGSSS + poblacion_urbana   + personas_desplazadas_expulsadas  Vacunas  pendiente incluir
+
+#formula.par <- y ~ 1 +  f(county,model="bym",graph=Ohio.adj, constr=TRUE) + f(county1,year,model="iid", constr=TRUE) + year + Aeropuerto_Nal + Penetracion_Internet +  Indice_Desempeño_Fiscal +    IPM_MUN +Afiliados_SGSSS + poblacion_urbana + Cobertura_bruta_educación + Tasa_mortalidadGEN + personas_desplazadas_expulsadas + PRE_DM + PRE_ERC + Vacunas + Altitud_media + DIM_INSTITUCIONAL
+
+# hasta personas_desplazadas_expulsadas corre sn 
+
+formula.par <- y ~ 1 +  f(county,model="bym",graph=Ohio.adj, constr=TRUE) + f(county1,year,model="iid", constr=TRUE) + year + Aeropuerto_Nal + Penetracion_Internet +  Indice_Desempeño_Fiscal + IPM_MUN +  Cobertura_bruta_educación + Tasa_mortalidadGEN   + PRE_DM +  Altitud_media + DIM_INSTITUCIONAL + Afiliados_SGSSS.1
+
+
+
+
+formula.par <- y ~ 1 +  f(county,model="bym",graph=Ohio.adj, constr=TRUE) + f(county1,year,model="iid", constr=TRUE) + year + Afiliados_SGSSS.1 + poblacion_urbana.1 + personas_desplazadas_expulsadas.1
+
+
+model.par <- inla(formula.par,family="poisson",data=data,E=E, 
+                  control.predictor=list(compute=TRUE), 
+                  control.compute=list(dic=TRUE,cpo=TRUE), verbose=TRUE )
+
+summary(model.par)
+round(model.par$summary.fixed[,1:5],3)
+
+
+```
+
+Recuerde que condado1 es un duplicado de condado, 
+pero es necesario como en R-INLA cada variable se puede asociar con una función f() solo una vez.
+La primera parte de la fórmula especifica el modelo BYM como se presenta en la Sección 6.1.1, 
+mientras que el año identifica el efecto de tiempo global estimated as a fixed effect) 
+(estimado como un efecto fijo) y  and f(county1,year,model="iid") f(condado1,año,modelo="iid")
+es la tendencia diferencial, es decir, la interacción entre espacio y tiempo, modelada 
+a través de un previo intercambiable. 
+
+```{r}
+# *** Code for Figure 7.1
+
+x <- seq(1,22) # Years
+plot(x,model.par$summary.fixed[2,1]*x, type="l", main="",xlab="t",ylab=expression(beta*t), ylim=c())
+lines(model.par$summary.fixed[2,3]*x,lty=2)
+lines(model.par$summary.fixed[2,5]*x,lty=2)
+# ***
+```
+
+
+
+
+
+Finalmente, la media posterior del efecto espacial 𝜁i = exp(ui + 𝑣i) se obtiene como habitual a través de:
+*** Code for Figure 7.2 left
+
+```{r}
+m <- model.par$marginals.random[[1]][1:1100]
+zeta.ST1 <- unlist(lapply(m,function(x)inla.emarginal(exp,x)))
+```
+
+```{r}
+SMR.cutoff<- c(0.05,0.62,1,2,12)
+xi.factor <- cut(zeta.ST1,breaks=SMR.cutoff,include.lowest=TRUE)
+
+
+
+
+m <- model.par$summary.random[[2]][1:1100,2]
+int.cut <- c(-0.19,-0.015,0,0.018,0.09)
+int.factor <- cut(m,breaks=int.cut,include.lowest=TRUE)
+
+
+```
+
+```{r}
+
+
+data.ohio <- attr(ohio, "data")
+attr(ohio, "data")=data.frame(data.ohio, xi=xi.factor)
+
+trellis.par.set(axis.line=list(col=NA))
+spplot(obj=ohio, zcol= "xi", col.regions=c("green","yellow","orange","red"),main="Media posterior del efecto principal espacial 𝜁i para la incidencia de COVID 19 en Colombia")
+# ***
+
+# *** Code for Figure 7.2 right
+data.ohio <- attr(ohio, "data")
+attr(ohio, "data") <- data.frame(data.ohio, int=int.factor)
+spplot(obj=ohio, zcol= "int",col.regions=c("green","yellow","orange","red"),main="el efecto diferencial del tiempo 𝛿i  para la incidencia de COVID 19 en Colombia")
+```
+
+
+7.1.1 Tendencia dinámica no paramétrica 
+
+```{r}
+remove(list=ls())
+```
+
+
+```{r}
+data <- read_excel("D:/MAESTRIA BIOESTADISITICA/TESIS/BASE DE DATOS/TESIS/data/data.xlsx")
+georgia <- readShapePoly("D:/MAESTRIA BIOESTADISITICA/TESIS/BASE DE DATOS/TESIS/fuentes/mpio2/Munpio.shp")
+
+```
+
+
+```{r}
+# Remove duplicates (area 88 and 94)
+names <- georgia$MpCodigo
+georgia <- georgia[-c(3, 4, 5, 6, 7, 8, 9, 11, 12, 19, 38, 84, 109, 136, 140, 145, 170, 187, 219, 225, 1120, 1121),]
+data.georgia <- attr(georgia, "data")
+
+
+```
+
+```{r}
+temp<- poly2nb(georgia ) ##es el temp en cameleti (temp <- poly2nb(london.gen))
+nb2INLA("Georgia.graph",temp)  ## nb2INLA("LDN.graph", temp)
+nb2INLA("Temp.graph",temp)  ## nb2INLA("LDN.graph", temp)
+Georgia.adj <- paste(getwd(),"/Georgia.graph",sep="")   ### LDN.adj <- paste(getwd(),"/LDN.graph",sep="")
+```
+
+```{r}
+
+Temp.adj <- paste(getwd(),"/Temp.graph",sep="")
+```
+
+
+```{r}
+formula.ST1 <- y ~  f(ID.area,model="bym",graph=Georgia.adj) +f(ID.year,model="rw2") + f(ID.year1,model="iid")
+lcs <- inla.make.lincombs(ID.year = diag(11),  ID.year1 = diag(11))
+
+model.ST1 <- inla(formula.ST1,family="poisson",data=data,E=E, 
+                  control.predictor=list(compute=TRUE),
+                  lincomb=lcs)
+
+temporal.CAR <- lapply(model.ST1$marginals.random$ID.year, 
+                     function(X){
+                       marg <- inla.tmarginal(function(x) exp(x), X)
+                       inla.emarginal(mean, marg)
+                     })
+
+temporal.IID <- lapply(model.ST1$marginals.random$ID.year1, 
+                     function(X){
+                       marg <- inla.tmarginal(function(x) exp(x), X)
+                       inla.emarginal(mean, marg)
+                     })
+```
+
+# *** Code for Figure 7.3
+Tendencia temporal posterior de covid: no estructurada
+efecto exp(𝜙t) (línea continua) y efecto estructurado temporalmente exp(𝛾t) (línea discontinua).
+
+```{r}
+
+plot(seq(1,11),seq(0.9,1.1,length=11),type="n",xlab="t",ylab=expression(exp(phi[t])))
+lines(unlist(temporal.IID))
+lines(unlist(temporal.CAR),lty=2)
+abline(h=1,lty=1)
+# ***
+```
+##################################################
+### Code for Section 7.1.2 (run the code for Section 7.1.1 first) 
+###################################################
+#--- Type I interaction ---#
+
+```{r}
+
+formula.intI<- y ~ + f(ID.area,model="bym", graph=Georgia.adj) +
+    f(ID.year,model="rw2") + f(ID.year1,model="iid") + f(ID.area.year,model="iid")
+
+mod.intI <- inla(formula.intI,family="poisson",data=data,E=E, 
+                 control.predictor=list(compute=TRUE), 
+                 control.compute=list(dic=TRUE,cpo=TRUE))
+
+```
+
+```{r}
+#--- Type II interaction ---#
+ID.area.int <- data$ID.area
+ID.year.int <- data$ID.year
+formula.intII<- y ~ f(ID.area,model="bym",graph=Georgia.adj) +
+  f(ID.year,model="rw2") + f(ID.year1,model="iid") +
+  f(ID.area.int,model="iid", group=ID.year.int,control.group=list(model="rw2")) 
+
+mod.intII <- inla(formula.intII,family="poisson",data=data,E=E, 
+                  control.predictor=list(compute=TRUE), 
+                  control.compute=list(dic=TRUE,cpo=TRUE))
+
+#--- Type III interaction ---#
+formula.intIII<- y ~  f(ID.area,model="bym",graph=Georgia.adj) +
+  f(ID.year,model="rw2") + 
+  f(ID.year1,model="iid") +
+  f(ID.year.int,model="iid", group=ID.area.int,control.group=list(model="besag", graph=Georgia.adj))
+
+mod.intIII <- inla(formula.intIII,family="poisson",data=data,E=E, 
+                   control.predictor=list(compute=TRUE), 
+                   control.compute=list(dic=TRUE,cpo=TRUE))
+
+#--- Type IV interaction ---#
+formula.intIV<- y ~ f(ID.area,model="bym",graph=Georgia.adj) +
+  f(ID.year,model="rw2") +
+  f(ID.year1,model="iid") + 
+  f(ID.area.int,model="besag", graph=Georgia.adj,group=ID.year.int,control.group=list(model="rw2"))
+
+mod.intIV <- inla(formula.intIV,family="poisson",data=data,E=E, 
+                  control.predictor=list(compute=TRUE), 
+                  control.compute=list(dic=TRUE,cpo=TRUE))
+
+delta.intI <- data.frame(delta=mod.intI$summary.random$ID.area.year[,2],year=data$ID.year,ID.area=data$ID.area)
+delta.intI.matrix <- matrix(delta.intI[,1], 1100,22,byrow=FALSE)
+rownames(delta.intI.matrix)<- delta.intI[1:1100,3]
+
+delta.intII <- data.frame(delta=mod.intII$summary.random$ID.area.int[,2],year=data$ID.year,ID.area=data$ID.area)
+delta.intII.matrix <- matrix(delta.intII[,1], 1100,22,byrow=FALSE)
+rownames(delta.intII.matrix)<- delta.intII[1:1100,3]
+
+delta.intIII <- data.frame(delta=mod.intIII$summary.random$ID.year.int[,2],year=data$ID.year,ID.area=data$ID.area)
+delta.intIII.matrix <- matrix(delta.intIII[,1], 1100,22,byrow=FALSE)
+rownames(delta.intIII.matrix)<- delta.intIII[1:1100,3]
+
+delta.intIV <- data.frame(delta=mod.intIV$summary.random$ID.area.int[,2],year=data$ID.year,ID.area=data$ID.area)
+delta.intIV.matrix <- matrix(delta.intIV[,1], 1100,22,byrow=FALSE)
+rownames(delta.intIV.matrix)<- delta.intIV[1:1100,3]
+
+# Check the absence of spatial trend for (intI)
+cutoff.interaction <- c(-1,-0.01,0.01,1)
+delta.intI.factor <- data.frame(NAME=data.georgia$NAME)
+for(i in 1:22){
+  delta.factor.temp <- cut(delta.intI.matrix[,i],breaks=cutoff.interaction,include.lowest=TRUE) 
+  delta.intI.factor <- cbind(delta.intI.factor,delta.factor.temp)
+}
+colnames(delta.intI.factor)<- c("NAME",seq(1,22))
+
+# Check the absence of spatial trend for (intII)
+delta.intII.factor <- data.frame(NAME=data.georgia$NAME)
+for(i in 1:22){
+  delta.factor.temp <- cut(delta.intII.matrix[,i],breaks=cutoff.interaction,include.lowest=TRUE) 
+  delta.intII.factor <- cbind(delta.intII.factor,delta.factor.temp)
+}
+colnames(delta.intII.factor)<- c("NAME",seq(2000,2010))
+
+# Check the absence of spatial trend (intIII)
+delta.intIII.factor <- data.frame(NAME=data.georgia$NAME)
+for(i in 1:11){
+  delta.factor.temp <- cut(delta.intIII.matrix[,i],breaks=cutoff.interaction,include.lowest=TRUE) 
+  delta.intIII.factor <- cbind(delta.intIII.factor,delta.factor.temp)
+}
+colnames(delta.intIII.factor)<- c("NAME",seq(2000,2010))
+
+# Check the Spatial trend (intIV)
+delta.intIV.factor <- data.frame(NAME=data.georgia$NAME)
+for(i in 1:11){
+  delta.factor.temp <- cut(delta.intIV.matrix[,i],breaks=cutoff.interaction,include.lowest=TRUE) 
+  delta.intIV.factor <- cbind(delta.intIV.factor,delta.factor.temp)
+}
+colnames(delta.intIV.factor)<- c("NAME",seq(2000,2010))
+
+# *** Code for Figure 7.4
+attr(georgia, "data") <- data.frame(data.georgia, intI=delta.intI.factor, intII=delta.intII.factor, intIII=delta.intIII.factor, intIV=delta.intIV.factor)
+trellis.par.set(axis.line=list(col=NA))
+spplot(obj=georgia, zcol=c("intI.2000","intI.2001","intI.2002",
+                           "intI.2003", "intI.2004","intI.2005",
+                           "intI.2006", "intI.2007","intI.2008",
+                           "intI.2009","intI.2010"), col.regions=gray(2.5:0.5/3),names.attr=seq(2000,2010),main="")
+# ***
+
+# *** Code for Figure 7.5
+spplot(obj=georgia, zcol=c("intII.2000","intII.2001","intII.2002",
+                           "intII.2003", "intII.2004","intII.2005",
+                           "intII.2006", "intII.2007","intII.2008",
+                           "intII.2009","intII.2010"), col.regions=gray(2.5:0.5/3),names.attr=seq(2000,2010),main="")
+# ***
+
+# *** Code for Figure 7.6
+spplot(obj=georgia, zcol=c("intIII.2000","intIII.2001","intIII.2002",
+                           "intIII.2003", "intIII.2004","intIII.2005",
+                           "intIII.2006", "intIII.2007","intIII.2008",
+                           "intIII.2009","intIII.2010"), col.regions=gray(2.5:0.5/3),names.attr=seq(2000,2010),main="")
+# ***
+
+# *** Code for Figure 7.7
+spplot(obj=georgia, zcol=c("intIV.2000","intIV.2001","intIV.2002",
+                           "intIV.2003", "intIV.2004","intIV.2005",
+                           "intIV.2006", "intIV.2007","intIV.2008",
+                           "intIV.2009","intIV.2010"), col.regions=gray(2.5:0.5/3),names.attr=seq(2000,2010),main="")
+# ***
+```
+
