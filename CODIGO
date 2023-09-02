@@ -1501,3 +1501,1904 @@ Nareas <- length(Casos_Covid_19_Combinado[,1])
 
 
 
+
+library(spdep)
+library(rgdal)
+library(readxl)
+library(RColorBrewer)
+library(classInt)
+library(maptools)
+library(dplyr)
+library(lubridate)
+library(pgirmess)
+library(quantmod)
+library(ggplot2)
+library(astsa)
+library(maptools) 
+require(sp)  
+require(spdep)
+require(classInt) 
+require(sf) 
+require(RColorBrewer)
+library (corrplot)
+library(car)
+library(table1)
+library(gridExtra)
+library(GWmodel)
+library(leaflet)
+library(tseries)
+library(astsa)
+library(fpp2)
+library(TSA)
+library(sjPlot)
+library(sjmisc)
+library(sjlabelled)
+library(jtools)      
+library(tidyverse)
+library(maditr)
+#par.ori <- par(no.readonly=TRUE)
+
+
+
+### DATOS
+
+# Base original
+data <- read_excel("D:/MAESTRIA BIOESTADISITICA/TESIS/BASE DE DATOS/TESIS/data/data.xlsx")
+data1 <- read_excel("D:/MAESTRIA BIOESTADISITICA/TESIS/BASE DE DATOS/TESIS/fuentes/POB_2020POSTCOVID.xlsx")
+data<-left_join(data,data1, by="Cod_DIVIPOLAtxt") 
+data$n<- data$Pob
+data$densidad_pob<- (data$Pob/data$Superficie_Km2)
+data$cob_vacunacion_pob2021 <- (data$Vacunas_Acum_POB2022/data$Pob_2021)*100
+data$tasaletalidad<- (data$Muertos_Acum/data$Casos_Acum)*100
+data$Tasamort_Acum <- (data$Muertos_Acum/data$Pob_2021)*100
+data$Tasamort_mes <- (data$Muertos/data$Casos)*100
+data$Aeropuerto_Nal<- as.character  (data$Aeropuerto_Nal)
+data$Aeropuerto_Nal.1<- as.numeric (data$Aeropuerto_Nal)
+data$Categoria_Ruralidadcat <-data$Categoria_Ruralidad
+data$Categoria_Ruralidadcat[data$Categoria_Ruralidadcat=="Ciudades y aglomeraciones"] <- 1
+data$Categoria_Ruralidadcat[data$Categoria_Ruralidadcat=="Intermedio"] <- 2
+data$Categoria_Ruralidadcat[data$Categoria_Ruralidadcat=="Rural"] <- 3
+data$Categoria_Ruralidadcat[data$Categoria_Ruralidadcat=="Rural disperso"] <- 4
+data$Categoria_Ruralidadcat<- as.numeric(data$Categoria_Ruralidadcat)
+  
+remove(data1)
+
+# Base reescalando  Altitud_media" , "Superficie_Km2
+
+data1<- scale(data[,c( "Altitud_media" , "Superficie_Km2")], center = TRUE, scale = TRUE)
+data<- data.frame(data, data1)
+remove(data1)
+
+# Calculo de incidencia por mes y  acumulada por mil habitantes
+
+data$IA_mes<- (data$Casos/data$Pob)*1000
+data$IA_Acum <- (data$Casos_Acum/data$Pob)*1000
+
+# correlacion 15 covariables despues de excluir 14 covariables por correlacion > (0,7) - (0,7) [codigo en R ANALISIS-linea 904]
+
+Covariables <- filter(data,year==22)
+Covariables $Aeropuerto_Nal<- as.numeric (Covariables $Aeropuerto_Nal)
+Covariablesnum<- Covariables %>% select(  Altitud_media , DIM_INSTITUCIONAL , IPM_MUN , 
+                                          poblacion_urbana,Tasa_mortalidadGEN ,
+                                          PRE_DM , PRE_ERC , cob_vacunacion_pob2021, Superficie_Km2 ,
+                                          Indice_Desempeño_Fiscal,  Aeropuerto_Nal, Categoria_Ruralidadcat,
+                                          Cobertura_bruta_educación, Afiliados_SGSSS, Penetracion_Internet)
+
+corvar<- cor(Covariablesnum, method = c("spearman"), use = "na.or.complete")%>% round(digits=1)
+corrplot(corvar)
+remove(Covariables)
+remove(Covariablesnum)
+
+# casos calculo  colinealidad 
+
+mod2depurado<- glm(  Casos~ Altitud_media.1+  DIM_INSTITUCIONAL+
+                      IPM_MUN +  poblacion_urbana + Tasa_mortalidadGEN+  PRE_DM + PRE_ERC +
+                       cob_vacunacion_pob2021  + Superficie_Km2.1 +  Rango_IDF +
+                       factor(Aeropuerto_Nal) + Categoria_Ruralidad + 
+                       Afiliados_SGSSS + Penetracion_Internet + Cobertura_bruta_educación,  offset = log(n), 
+                        family = poisson(link = "log"), data = data)
+
+#significancia 
+summary(mod2depurado)
+#colinealidad
+vif(mod2depurado)
+
+# modelo 2 eliminando  [Afiliados_SGSSS + Penetracion_Internet + Cobertura_bruta_educación] IPM VIF 8.28
+
+mod2depurado1<- glm(  Casos~ Altitud_media.1+  DIM_INSTITUCIONAL+
+                       IPM_MUN +  poblacion_urbana + Tasa_mortalidadGEN+  PRE_DM + PRE_ERC +
+                       cob_vacunacion_pob2021  + Superficie_Km2.1 +  Rango_IDF +
+                        factor(Aeropuerto_Nal) +Categoria_Ruralidad  + tasaletalidad + Tasamort_Acum,  offset = log(n), 
+                        family = poisson(link = "log"), data = data)
+
+
+#significancia 
+summary(mod2depurado1)
+#colinealidad
+vif(mod2depurado1)
+ 
+remove(corvar)
+remove(mod2depurado)
+remove(mod2depurado1)
+
+
+ #Analisis univariado
+
+#Medidas de tendencia central y dispersion  
+
+diciembre_2021<- filter(data, year==22)
+
+table1(~  IA_Acum + Altitud_media + DIM_INSTITUCIONAL + IPM_MUN + poblacion_urbana+
+         + Tasa_mortalidadGEN + PRE_DM + PRE_ERC + cob_vacunacion_pob2021 +
+          + Superficie_Km2 + Rango_IDF+factor (Aeropuerto_Nal)+ Categoria_Ruralidad ,data=diciembre_2021, 
+       overall="Total",  
+       render.continuous=c(.="Mean (SD)", .="Median [Q1, Q3]", .="IQR", .="CV%"))
+
+
+# diez primeros municipios por cada variable (Ajustar)
+diciembre_2021$mun<- paste(diciembre_2021$Nombre_municipio, diciembre_2021$DTO, sep = ", ") 
+poblacion_urbana<-diciembre_2021%>% arrange(desc(IA_Acum))%>% slice(1:10)
+poblacion_urbana$mun
+
+
+#bivariado
+
+
+ggplot(diciembre_2021, aes(x = poblacion_urbana, y = IA_Acum)) +
+  geom_point(color = "black", size = 1.0) +
+  geom_smooth(method = "lm") +
+  labs(x = "Porcentaje de población urbana", y = "Incidencia acumulada")
+
+
+ggplot(diciembre_2021, aes(x = Altitud_media, y = IA_Acum)) +
+  geom_point(color = "black", size = 1.0) +
+  geom_smooth(method = "lm") +
+  labs(x = "Altitud Media", y = "Incidencia acumulada")
+
+ggplot(diciembre_2021, aes(x = IPM_MUN, y = IA_Acum)) +
+  geom_point(color = "black", size = 1.0) +
+  geom_smooth(method = "lm") +
+  labs(x = "Indice de pobreza Multidimensional", y = "Incidencia acumulada")
+
+
+ggplot(diciembre_2021, aes(x = DIM_INSTITUCIONAL , y = IA_Acum)) +
+  geom_point(color = "black", size = 1.0) +
+  geom_smooth(method = "lm") +
+  labs(x = "Dimension Institucional ", y = "Incidencia acumulada")
+
+ggplot(diciembre_2021, aes(x = Tasa_mortalidadGEN, y = IA_Acum)) +
+  geom_point(color = "black", size = 1.0) +
+  geom_smooth(method = "lm") +
+  labs(x = "Tasa de mortalidad general", y = "Incidencia acumulada")
+
+ggplot(diciembre_2021, aes(x = PRE_DM , y = IA_Acum)) +
+  geom_point(color = "black", size = 1.0) +
+  geom_smooth(method = "lm") +
+  labs(x = "Prevalencia de Diabetes", y = "Incidencia acumulada")
+
+ggplot(diciembre_2021, aes(x = PRE_ERC, y = IA_Acum)) +
+  geom_point(color = "black", size = 1.0) +
+  geom_smooth(method = "lm") +
+  labs(x = "Prevalencia de enfermedad renal cronica", y = "Incidencia acumulada")
+
+ggplot(diciembre_2021, aes(x = Cobertura_bruta_educación, y = IA_Acum)) +
+  geom_point(color = "black", size = 1.0) +
+  geom_smooth(method = "lm") +
+  labs(x = "Cobertura bruta de educación", y = "Incidencia acumulada")
+
+
+
+ggplot(diciembre_2021, aes(x = cob_vacunacion_pob2021 , y = IA_Acum)) +
+  geom_point(color = "black", size = 1.0) +
+  geom_smooth(method = "lm") +
+  labs(x = "cobertura de vacunacion COVID19 pob. 2021", y = "Incidencia acumulada")
+
+
+ggplot(diciembre_2021, aes(x =Aeropuerto_Nal , y = IA_Acum)) +
+  geom_point(color = "black", size = 1.0) +
+  geom_smooth(method = "lm") +
+  labs(x = "Aeropuerto Nacional", y = "Incidencia acumulada")
+
+ggplot(diciembre_2021, aes(x = Rango_IDF, y = IA_Acum)) +
+  geom_point(color = "black", size = 1.0) +
+  geom_smooth(method = "lm") +
+  labs(x = "Rango de indice desempeño fiscal", y = "Incidencia acumulada")
+
+
+
+
+# por categorias 
+
+xalm=unique(quantile(diciembre_2021$poblacion_urbana,0:10/10))
+diciembre_2021$poblacion_urbana.cat<-   cut(x = diciembre_2021$poblacion_urbana, breaks = xalm, labels = xalm[-1])
+plot(diciembre_2021$poblacion_urbana.cat, diciembre_2021$IA_Acum) 
+
+
+xalm=unique(quantile(diciembre_2021$Altitud_media,0:10/10))
+diciembre_2021$Altitud_media.cat<-   cut(x = diciembre_2021$Altitud_media, breaks = xalm, labels = xalm[-1])
+plot(diciembre_2021$Altitud_media.cat, diciembre_2021$IA_Acum)
+
+xalm=unique(quantile(diciembre_2021$IPM_MUN,0:10/10))
+diciembre_2021$IPM_MUN.cat<-   cut(x = diciembre_2021$IPM_MUN, breaks = xalm, labels = xalm[-1])
+plot(diciembre_2021$IPM_MUN.cat, diciembre_2021$IA_Acum)
+
+
+xalm=unique(quantile(diciembre_2021$DIM_INSTITUCIONAL,0:10/10))
+diciembre_2021$DIM_INSTITUCIONAL.cat<-   cut(x = diciembre_2021$DIM_INSTITUCIONAL, breaks = xalm, labels = xalm[-1])
+plot(diciembre_2021$DIM_INSTITUCIONAL.cat, diciembre_2021$IA_Acum)
+
+xalm=unique(quantile(diciembre_2021$Tasa_mortalidadGEN,0:10/10))
+diciembre_2021$Tasa_mortalidadGEN.cat<-   cut(x = diciembre_2021$Tasa_mortalidadGEN, breaks = xalm, labels = xalm[-1])
+plot(diciembre_2021$Tasa_mortalidadGEN.cat, diciembre_2021$IA_Acum)
+
+xalm=unique(quantile(diciembre_2021$PRE_DM,0:10/10))
+diciembre_2021$PRE_DM.cat<-   cut(x = diciembre_2021$PRE_DM, breaks = xalm, labels = xalm[-1])
+plot(diciembre_2021$PRE_DM.cat, diciembre_2021$IA_Acum)
+
+xalm=unique(quantile(diciembre_2021$PRE_ERC,0:10/10))
+diciembre_2021$PRE_ERC.cat<-   cut(x = diciembre_2021$PRE_ERC, breaks = xalm, labels = xalm[-1])
+plot(diciembre_2021$PRE_ERC.cat, diciembre_2021$IA_Acum)
+
+xalm=unique(quantile(diciembre_2021$Cobertura_bruta_educación,0:10/10))
+diciembre_2021$Cobertura_bruta_educación.cat<-   cut(x = diciembre_2021$Cobertura_bruta_educación, breaks = xalm, labels = xalm[-1])
+plot(diciembre_2021$Cobertura_bruta_educación.cat, diciembre_2021$IA_Acum)
+
+xalm=unique(quantile(diciembre_2021$cob_vacunacion_pob2021,0:10/10))
+diciembre_2021$cob_vacunacion_pob2021.cat<-   cut(x = diciembre_2021$cob_vacunacion_pob2021, breaks = xalm, labels = xalm[-1])
+plot(diciembre_2021$cob_vacunacion_pob2021.cat, diciembre_2021$IA_Acum)
+
+xalm=unique(quantile(diciembre_2021$Superficie_Km2,0:10/10))
+diciembre_2021$Superficie_Km2.cat<-   cut(x = diciembre_2021$Superficie_Km2, breaks = xalm, labels = xalm[-1])
+plot(diciembre_2021$Superficie_Km2.cat, diciembre_2021$IA_Acum)
+
+
+
+#Shape municipios colombia 
+municipios=st_read ( "D:/MAESTRIA BIOESTADISITICA/TESIS/BASE DE DATOS/TESIS/fuentes/mpio2/Munpio.shp")
+municipios$Cod_DIVIPOLA<-as.numeric(municipios$MpCodigo)
+diciembre_2021<- filter(data, year==22)
+
+municipios<-left_join(municipios, diciembre_2021, by="Cod_DIVIPOLA")
+municipios <- municipios %>%  filter(MpCodigo!= "88001")
+municipios <- municipios %>%  filter(MpCodigo!= "88564")
+
+plot1<-ggplot(data = municipios) +
+  geom_sf(aes(fill = poblacion_urbana)) + 
+  scale_fill_gradient(low = "green",  high = "red", na.value = "NA") 
+
+ 
+
+
+plot2 <-ggplot(data = municipios) +
+  geom_sf(aes(fill = densidad_pob)) + 
+  scale_fill_gradient(low = "green",  high = "red", na.value = "NA")
+
+
+
+plot3<- ggplot(data = municipios) +
+  geom_sf(aes(fill = Aeropuerto_Nal)) 
+
+plot4<-ggplot(data = municipios) +
+  geom_sf(aes(fill = Cobertura_bruta_educación)) + 
+  scale_fill_gradient(low = "green",  high = "red", na.value = "NA") 
+
+plot5<- ggplot(data = municipios) +
+  geom_sf(aes(fill = IPM_MUN)) + 
+  scale_fill_gradient(low = "green",  high = "red", na.value = "NA")
+
+plot6<- ggplot(data = municipios) +
+  geom_sf(aes(fill = Indice_Desempeño_Fiscal)) + 
+  scale_fill_gradient(low = "green",  high = "red", na.value = "NA") 
+
+  
+plot7<- ggplot(data = municipios) +
+  geom_sf(aes(fill = DIM_INSTITUCIONAL)) + 
+  scale_fill_gradient(low = "green",  high = "red", na.value = "NA")
+  
+plot8<- ggplot(data = municipios) +
+  geom_sf(aes(fill = Tasa_mortalidadGEN)) + 
+  scale_fill_gradient(low = "green",  high = "red", na.value = "NA")
+ 
+plot9<- ggplot(data = municipios) +
+  geom_sf(aes(fill = cob_vacunacion_pob2021)) + 
+  scale_fill_gradient(low = "green",  high = "red", na.value = "NA")
+
+plot10<-  ggplot(data = municipios) +
+  geom_sf(aes(fill = IA_Acum)) + 
+  scale_fill_gradient(low = "green",  high = "red", na.value = "NA") 
+
+plot11<- ggplot(data = municipios) +
+  geom_sf(aes(fill = PRE_DM)) + 
+  scale_fill_gradient(low = "green",  high = "red", na.value = "NA") 
+  
+plot12<-  ggplot(data = municipios) +
+  geom_sf(aes(fill = PRE_ERC)) + 
+  scale_fill_gradient(low = "green",  high = "red", na.value = "NA") 
+  
+
+plot13 <-ggplot(data = municipios) +
+  geom_sf(aes(fill = Altitud_media)) + 
+  scale_fill_gradient(low = "green",  high = "red", na.value = "NA")  
+
+
+plot14 <-ggplot(data = municipios) +
+  geom_sf(aes(fill = Superficie_Km2)) + 
+  scale_fill_gradient(low = "green",  high = "red", na.value = "NA")  
+
+  
+#merge all three plots within one grid (and visualize this)
+grid.arrange(plot1, plot2, ncol=2) #arranges plots within grid
+grid.arrange(plot3, plot4, ncol=2)
+grid.arrange(plot5, plot6, ncol=2) #arranges plots within grid
+grid.arrange(plot7, plot8, ncol=2)
+grid.arrange(plot9, plot10,ncol=2) #arranges plots within grid
+grid.arrange(plot11, plot12,ncol=2) 
+grid.arrange(plot13, plot14,ncol=2)
+
+
+
+
+
+
+#save
+#g <- arrangeGrob(plot1, plot2, plot3, nrow=3) #generates g
+#ggsave(file="whatever.PNG", g) #saves g
+
+
+casos_mes_area<- dcast(data, Cod_DIVIPOLA ~ year, value.var = "Casos")
+casos_mes_area[casos_mes_area == 0] <- NA
+
+
+municipios=st_read ( "D:/MAESTRIA BIOESTADISITICA/TESIS/BASE DE DATOS/TESIS/fuentes/mpio2/Munpio.shp")
+municipios$Cod_DIVIPOLA<-as.numeric(municipios$MpCodigo)
+municipios<-left_join(municipios, casos_mes_area, by="Cod_DIVIPOLA")
+municipios <- municipios %>%  filter(MpCodigo!= "88001")
+municipios <- municipios %>%  filter(MpCodigo!= "88564")
+
+
+periodo1 <-ggplot(data = municipios) +
+  geom_sf(aes(fill = `1`)) + 
+  scale_fill_gradient(low = "green", high = "red", na.value = "NA") +
+  labs(title = "Marzo 2020 ")
+
+periodo3 <-ggplot(data = municipios) +
+  geom_sf(aes(fill = `3`)) + 
+  scale_fill_gradient(low = "green", high = "red", na.value = "NA") +
+  labs(title = "Mayo 2020 ")
+
+periodo5 <-ggplot(data = municipios) +
+  geom_sf(aes(fill = `5`)) + 
+  scale_fill_gradient(low = "green", high = "red", na.value = "NA") +
+  labs(title = "Julio 2020 ")
+
+
+periodo7 <-ggplot(data = municipios) +
+  geom_sf(aes(fill = `7`)) + 
+  scale_fill_gradient(low = "green", high = "red", na.value = "NA") +
+  labs(title = "Septiembre 2020 ")
+
+
+
+periodo9 <-ggplot(data = municipios) +
+  geom_sf(aes(fill = `9`)) + 
+  scale_fill_gradient(low = "green", high = "red", na.value = "NA") +
+  labs(title = "Noviembre 2020 ")
+
+periodo11 <-ggplot(data = municipios) +
+  geom_sf(aes(fill = `11`)) + 
+  scale_fill_gradient(low = "green", high = "red", na.value = "NA") +
+  labs(title = "Enero 2021 ")
+
+periodo13 <-ggplot(data = municipios) +
+  geom_sf(aes(fill = `13`)) + 
+  scale_fill_gradient(low = "green", high = "red", na.value = "NA") +
+  labs(title = "Marzo 2021")
+
+
+periodo15 <-ggplot(data = municipios) +
+  geom_sf(aes(fill = `15`)) + 
+  scale_fill_gradient(low = "green", high = "red", na.value = "NA") +
+  labs(title = "Mayo 2020 ")
+
+
+
+
+periodo17 <-ggplot(data = municipios) +
+  geom_sf(aes(fill = `17`)) + 
+  scale_fill_gradient(low = "green", high = "red", na.value = "NA") +
+  labs(title = "Julio 2020 ")
+
+periodo19 <-ggplot(data = municipios) +
+  geom_sf(aes(fill = `19`)) + 
+  scale_fill_gradient(low = "green", high = "red", na.value = "NA") +
+  labs(title = "Septiembre 2021 ")
+
+periodo21 <-ggplot(data = municipios) +
+  geom_sf(aes(fill = `21`)) + 
+  scale_fill_gradient(low = "green", high = "red", na.value = "NA") +
+  labs(title = "Noviembre 2021")
+
+
+periodo22 <-ggplot(data = municipios) +
+  geom_sf(aes(fill = `22`)) + 
+  scale_fill_gradient(low = "green", high = "red", na.value = "NA") +
+  labs(title = "Diciembre 2021")
+
+
+windows()
+
+grid.arrange(periodo1, periodo3,periodo5, periodo7, ncol=2, nrow= 2)
+grid.arrange(periodo9, periodo11,periodo13, periodo15, ncol=2, nrow= 2)
+grid.arrange(periodo17, periodo19,periodo21, periodo22, ncol=2, nrow= 2)
+
+
+remove(periodo1,periodo11, periodo13, periodo15, periodo17, periodo19, periodo21, periodo22, periodo3, periodo5, periodo7, periodo9)
+remove(plot1, plot2, plot3,plot4,plot5,plot6, plot7, plot8, plot9, plot10, plot11,plot12, plot13, plot14)
+
+# correlacion Espacial 
+
+# Leer datos
+
+Colombia1_1 <- readShapePoly("D:/MAESTRIA BIOESTADISITICA/TESIS/BASE DE DATOS/TESIS/fuentes/mpio2/Munpio.shp")
+Colombia_0 <- readOGR("D:/MAESTRIA BIOESTADISITICA/TESIS/BASE DE DATOS/TESIS/fuentes/mpio2/Munpio.shp")
+
+#eliminando areas no municipalizadas
+
+Colombia1_1 <- Colombia1_1 [-c(3, 4, 5, 6, 7, 8, 9, 11, 12, 19, 38, 84, 109, 136, 140, 145, 170, 187, 219, 225, 1120, 1121),]
+Colombia_0<- Colombia_0[-c(0,3, 4, 5, 6, 7, 8, 9, 11, 12, 19, 38, 84, 109, 136, 140, 145, 170, 187, 219, 225, 1120, 1121),]
+
+##eliminando leticia, puerto nariño y taraira 
+
+Colombia1 <- Colombia1_1 [-c(1,2,3),]
+Colombia <- Colombia_0 [-c(1,2,3),]
+remove(Colombia1_1,Colombia_0)
+
+temp<- poly2nb(Colombia ) ##es el temp en cameleti (temp <- poly2nb(london.gen))
+nb2INLA("COVID.graph",temp)  ## nb2INLA("LDN.graph", temp)
+Colombia.adj<- paste(getwd(),"/COVID.graph",sep="")   ### LDN.adj <- paste(getwd(),"/LDN.graph",sep="")
+summary(temp)
+
+## descargando shape para cargar en GEODA y tener un archivo GAL tipo REINA 
+
+#writeSpatialShape(Colombia, "Colombia").
+#writeSpatialShape(Colombia1, "Colombia1")
+
+# Read neighbour
+Colombia.nb <- read.gal("D:/MAESTRIA BIOESTADISITICA/TESIS/BASE DE DATOS/TESIS/COVID.gal", region.id = Colombia@data$MpCodigo)
+summary(Colombia.nb)
+
+plot(Colombia, border = "grey60")
+plot(Colombia.nb, coordinates(Colombia), pch = 19, cex = 0.6, add = TRUE)
+
+
+
+
+# Neighbour Objects, k=1, minimum distance
+# nbdist calculate the distance corresponding to the neighbour object
+coords1 <- coordinates(Colombia)
+IDs1 <- Colombia@data$MpCodigo
+
+#knearneigh
+# La función devuelve una matriz con los índices de los puntos pertenecientes al conjunto de los k vecinos más cercanos
+# el uno del otro.
+#knn2nb
+# La función convierte un objeto knn devuelto por knearneigh en una lista de vecinos de
+# class nb con una lista de vectores enteros que contienen identificadores de números de regiones vecinas.
+
+Co8_nb <- knn2nb(knearneigh(coords1, k = 1), row.names = IDs1)
+Co9_nb <- knn2nb(knearneigh(coords1, k = 2), row.names = IDs1)
+Co10_nb <- knn2nb(knearneigh(coords1, k = 4), row.names = IDs1)
+dsts1 <- unlist(nbdists(Co8_nb, coords1))
+Co11_nb <- dnearneigh(coords1, d1 = 0, d2 = 0.75 * max(dsts1), row.names = IDs1)
+
+
+# Objetos de pesos espaciales
+# Matriz de peso
+#nb2listw<- enumera el objeto y lo convierte en un objeto de peso
+
+# Zero.policia= VERDADERO
+
+#Co0_lw_W <- nb2listw(Colombia.nb,zero.policy=TRUE, glist=TRUE) ##
+Co0_lw_W <- nb2listw(Colombia.nb,zero.policy=TRUE)
+print(Co0_lw_W, zero.policy = TRUE)
+Co0_lw_W
+names(Co0_lw_W)
+names(attributes(Co0_lw_W))
+
+Co0_lw_W$neighbours
+Co0_lw_W$weights
+Co0_lw_W$style
+
+# Calcular promedio
+1/rev(range(card(Co0_lw_W$neighbours)))
+summary(unlist(Co0_lw_W$weights))
+summary(sapply(Co0_lw_W$weights, sum))
+
+
+# Ajuste estilo B, conserva un peso de unidad
+# relación
+
+Co0_lw_B <- nb2listw(Colombia.nb, style = "B",zero.policy=TRUE)
+print(Co0_lw_B, zero.policy = TRUE)
+summary(unlist(Co0_lw_B$weights))
+summary(sapply(Co0_lw_B$weights, sum))
+
+# # Relaciones fuertes en los vecinos
+
+dsts1 <- nbdists(Colombia.nb, coordinates(Colombia))
+idw1 <- lapply(dsts1, function(x) 1/(x/1000))
+Co0_lw_idwB <- nb2listw(Colombia.nb, glist = idw1, style = "B",zero.policy=TRUE)
+summary(unlist(Co0_lw_idwB$weights))
+
+Co0_lw_D1 <- nb2listw(Co11_nb, style = "B", zero.policy = TRUE)
+print(Co0_lw_D1, zero.policy = TRUE)
+Co14_nb <- Colombia.nb
+
+Co16_nb <-Co8_nb
+isTRUE(all.equal(Co8_nb, Co16_nb, check.attributes = FALSE))
+
+# Spatial Statistics Approaches
+# Mapas 
+# Clases y Colores
+nclr <- 5 # Numero de colores
+plotclr <- brewer.pal(nclr,"Blues") # Tonalidad Axules
+AcrProv1=Colombia@data$MpNombre
+cent <- coordinates(Colombia)
+pal1 <- brewer.pal(6,"Reds")
+
+
+# moran para cada mes
+# MARZO 2020
+
+Tabla2=as.data.frame(data %>% filter(Fecha == as.Date("2020-03-01")) 
+                     %>% arrange(desc(Cod_DIVIPOLA)) %>% select(Cod_DIVIPOLA,Pob,IA_mes,IA_Acum, Casos_Acum, Casos))
+aux= Colombia@data
+aux=as.data.frame(aux %>% select(  MpCodigo, MpNombre))
+aux$MpCodigo= as.double(aux$MpCodigo)
+Tabla2$Cod_DIVIPOLA=as.double(Tabla2$Cod_DIVIPOLA)
+aux=aux %>% left_join(Tabla2, by = c("MpCodigo" = "Cod_DIVIPOLA"))
+aux[is.na(aux)] <- 0
+
+aux$SRM=(sum(aux$Casos_Acum)/sum(aux$Pob))*(aux$Pob/aux$Casos_Acum)
+aux$SRM=((aux$Casos_Acum)/(aux$Pob))*(aux$Pob/aux$Casos_Acum)
+aux[aux==Inf] <- 0
+aux[is.na(aux)] <- 0
+
+
+
+row.names(aux) <- row.names(Colombia)
+poligonos.data <- SpatialPolygonsDataFrame(Colombia,aux)
+
+#Tasa_Contagios <- poligonos.data$Casos/poligonos.data$Pob
+#Tasa_Contagios[is.na(Tasa_Contagios)] <- 0
+#Tasa_Contagios[Tasa_Contagios==Inf] <- 0
+
+
+
+windows()
+# mapa incidencia mes
+aux2<-aux
+aux2[aux2 == 0] <- NA
+
+
+class <- classIntervals(round(aux2$IA_mes,3),nclr,style="equal")
+colcode <- findColours(class,plotclr)
+plot (poligonos.data, col=colcode, border="grey", axes=T)
+title(main = "Incidencia COVID 19, Marzo 2020 ",cex=3)
+legend("bottomright",legend = names(attr(colcode,"table")),fill= attr(colcode,"palette"),cex=0.75)
+
+# mapa riesgos relativos 
+windows()
+class1 <- classIntervals(round(aux2$SRM,3),nclr,style="equal")
+spplot(poligonos.data, "SRM", at = class1$brks,col.regions=pal1)
+
+
+Tabla_marzo2020=poligonos.data@data
+Tabla_marzo2020[is.na(Tabla_marzo2020)] <- 0
+
+
+
+# ABRIL 2020
+
+Tabla2=as.data.frame(data %>% filter(Fecha == as.Date("2020-04-01")) 
+                     %>% arrange(desc(Cod_DIVIPOLA)) %>% select(Cod_DIVIPOLA,Pob,IA_mes,IA_Acum, Casos_Acum, Casos))
+aux= Colombia@data
+aux=as.data.frame(aux %>% select(  MpCodigo, MpNombre))
+aux$MpCodigo= as.double(aux$MpCodigo)
+Tabla2$Cod_DIVIPOLA=as.double(Tabla2$Cod_DIVIPOLA)
+aux=aux %>% left_join(Tabla2, by = c("MpCodigo" = "Cod_DIVIPOLA"))
+aux[is.na(aux)] <- 0
+
+aux$SRM=(sum(aux$Casos_Acum)/sum(aux$Pob))*(aux$Pob/aux$Casos_Acum)
+aux[aux==Inf] <- 0
+aux[is.na(aux)] <- 0
+
+
+row.names(aux) <- row.names(Colombia)
+poligonos.data <- SpatialPolygonsDataFrame(Colombia,aux)
+
+Tasa_Contagios <- poligonos.data$Casos/poligonos.data$Pob
+Tasa_Contagios[is.na(Tasa_Contagios)] <- 0
+Tasa_Contagios[Tasa_Contagios==Inf] <- 0
+
+windows()
+
+# mapa incidencia mes
+
+
+aux2<-aux
+aux2[aux2 == 0] <- NA
+class <- classIntervals(round(aux2$IA_mes,3),nclr,style="equal")
+colcode <- findColours(class,plotclr)
+plot (poligonos.data, col=colcode, border="grey", axes=T)
+title(main = "Incidencia COVID 19, Abril 2020 ",cex=3)
+legend("bottomright",legend = names(attr(colcode,"table")),fill= attr(colcode,"palette"),cex=0.75)
+
+# mapa riesgos relativos 
+windows()
+class1 <- classIntervals(round(aux2$SRM,3),nclr,style="equal")
+spplot(poligonos.data, "SRM", at = class1$brks,col.regions=pal1)
+
+
+Tabla_abril2020=poligonos.data@data
+Tabla_abril2020[is.na(Tabla_abril2020)] <- 0
+
+# Mayo 2020
+
+
+Tabla2=as.data.frame(data %>% filter(Fecha == as.Date("2020-05-01")) 
+                     %>% arrange(desc(Cod_DIVIPOLA)) %>% select(Cod_DIVIPOLA,Pob,IA_mes,IA_Acum, Casos_Acum, Casos))
+aux= Colombia@data
+aux=as.data.frame(aux %>% select(  MpCodigo, MpNombre))
+aux$MpCodigo= as.double(aux$MpCodigo)
+Tabla2$Cod_DIVIPOLA=as.double(Tabla2$Cod_DIVIPOLA)
+aux=aux %>% left_join(Tabla2, by = c("MpCodigo" = "Cod_DIVIPOLA"))
+aux[is.na(aux)] <- 0
+
+aux$SRM=(sum(aux$Casos_Acum)/sum(aux$Pob))*(aux$Pob/aux$Casos_Acum)
+aux[aux==Inf] <- 0
+aux[is.na(aux)] <- 0
+
+
+row.names(aux) <- row.names(Colombia)
+poligonos.data <- SpatialPolygonsDataFrame(Colombia,aux)
+
+Tasa_Contagios <- poligonos.data$Casos/poligonos.data$Pob
+Tasa_Contagios[is.na(Tasa_Contagios)] <- 0
+Tasa_Contagios[Tasa_Contagios==Inf] <- 0
+
+windows()
+
+# mapa incidencia mes
+
+aux2<-aux
+aux2[aux2 == 0] <- NA
+class <- classIntervals(round(aux2$IA_mes,3),nclr,style="equal")
+colcode <- findColours(class,plotclr)
+plot (poligonos.data, col=colcode, border="grey", axes=T)
+title(main = "Incidencia COVID 19, Mayo 2020 ",cex=3)
+legend("bottomright",legend = names(attr(colcode,"table")),fill= attr(colcode,"palette"),cex=0.75)
+
+# mapa riesgos relativos 
+windows()
+class1 <- classIntervals(round(aux2$SRM,3),nclr,style="equal")
+spplot(poligonos.data, "SRM", at = class1$brks,col.regions=pal1)
+
+
+Tabla_mayo2020=poligonos.data@data
+Tabla_mayo2020[is.na(Tabla_mayo2020)] <- 0
+
+# Junio 2020
+
+
+Tabla2=as.data.frame(data %>% filter(Fecha == as.Date("2020-06-01")) 
+                     %>% arrange(desc(Cod_DIVIPOLA)) %>% select(Cod_DIVIPOLA,Pob,IA_mes,IA_Acum, Casos_Acum, Casos))
+aux= Colombia@data
+aux=as.data.frame(aux %>% select(  MpCodigo, MpNombre))
+aux$MpCodigo= as.double(aux$MpCodigo)
+Tabla2$Cod_DIVIPOLA=as.double(Tabla2$Cod_DIVIPOLA)
+aux=aux %>% left_join(Tabla2, by = c("MpCodigo" = "Cod_DIVIPOLA"))
+aux[is.na(aux)] <- 0
+
+aux$SRM=(sum(aux$Casos_Acum)/sum(aux$Pob))*(aux$Pob/aux$Casos_Acum)
+aux[aux==Inf] <- 0
+aux[is.na(aux)] <- 0
+
+
+row.names(aux) <- row.names(Colombia)
+poligonos.data <- SpatialPolygonsDataFrame(Colombia,aux)
+
+Tasa_Contagios <- poligonos.data$Casos/poligonos.data$Pob
+Tasa_Contagios[is.na(Tasa_Contagios)] <- 0
+Tasa_Contagios[Tasa_Contagios==Inf] <- 0
+
+windows()
+
+# mapa incidencia mes
+aux2<-aux
+aux2[aux2 == 0] <- NA
+class <- classIntervals(round(aux2$IA_mes,3),nclr,style="equal")
+colcode <- findColours(class,plotclr)
+plot (poligonos.data, col=colcode, border="grey", axes=T)
+title(main = "Incidencia COVID 19, Junio 2020 ",cex=3)
+legend("bottomright",legend = names(attr(colcode,"table")),fill= attr(colcode,"palette"),cex=0.75)
+
+# mapa riesgos relativos 
+windows()
+class1 <- classIntervals(round(aux2$SRM,3),nclr,style="equal")
+spplot(poligonos.data, "SRM", at = class1$brks,col.regions=pal1)
+
+
+Tabla_junio2020=poligonos.data@data
+Tabla_junio2020[is.na(Tabla_junio2020)] <- 0
+
+
+# Julio 2020
+
+Tabla2=as.data.frame(data %>% filter(Fecha == as.Date("2020-07-01")) 
+                     %>% arrange(desc(Cod_DIVIPOLA)) %>% select(Cod_DIVIPOLA,Pob,IA_mes,IA_Acum, Casos_Acum, Casos))
+aux= Colombia@data
+aux=as.data.frame(aux %>% select(  MpCodigo, MpNombre))
+aux$MpCodigo= as.double(aux$MpCodigo)
+Tabla2$Cod_DIVIPOLA=as.double(Tabla2$Cod_DIVIPOLA)
+aux=aux %>% left_join(Tabla2, by = c("MpCodigo" = "Cod_DIVIPOLA"))
+aux[is.na(aux)] <- 0
+
+aux$SRM=(sum(aux$Casos_Acum)/sum(aux$Pob))*(aux$Pob/aux$Casos_Acum)
+aux[aux==Inf] <- 0
+aux[is.na(aux)] <- 0
+
+
+row.names(aux) <- row.names(Colombia)
+poligonos.data <- SpatialPolygonsDataFrame(Colombia,aux)
+
+Tasa_Contagios <- poligonos.data$Casos/poligonos.data$Pob
+Tasa_Contagios[is.na(Tasa_Contagios)] <- 0
+Tasa_Contagios[Tasa_Contagios==Inf] <- 0
+
+windows()
+
+# mapa incidencia mes
+aux2<-aux
+aux2[aux2 == 0] <- NA
+class <- classIntervals(round(aux2$IA_mes,3),nclr,style="equal")
+colcode <- findColours(class,plotclr)
+plot (poligonos.data, col=colcode, border="grey", axes=T)
+title(main = "Incidencia COVID 19, Julio 2020 ",cex=3)
+legend("bottomright",legend = names(attr(colcode,"table")),fill= attr(colcode,"palette"),cex=0.75)
+
+# mapa riesgos relativos 
+windows()
+class1 <- classIntervals(round(aux2$SRM,3),nclr,style="equal")
+spplot(poligonos.data, "SRM", at = class1$brks,col.regions=pal1)
+
+Tabla_julio2020=poligonos.data@data
+Tabla_julio2020[is.na(Tabla_julio2020)] <- 0
+
+
+# Agosto 2020
+
+Tabla2=as.data.frame(data %>% filter(Fecha == as.Date("2020-08-01")) 
+                     %>% arrange(desc(Cod_DIVIPOLA)) %>% select(Cod_DIVIPOLA,Pob,IA_mes,IA_Acum, Casos_Acum, Casos))
+aux= Colombia@data
+aux=as.data.frame(aux %>% select(  MpCodigo, MpNombre))
+aux$MpCodigo= as.double(aux$MpCodigo)
+Tabla2$Cod_DIVIPOLA=as.double(Tabla2$Cod_DIVIPOLA)
+aux=aux %>% left_join(Tabla2, by = c("MpCodigo" = "Cod_DIVIPOLA"))
+aux[is.na(aux)] <- 0
+
+aux$SRM=(sum(aux$Casos_Acum)/sum(aux$Pob))*(aux$Pob/aux$Casos_Acum)
+aux[aux==Inf] <- 0
+aux[is.na(aux)] <- 0
+
+
+row.names(aux) <- row.names(Colombia)
+poligonos.data <- SpatialPolygonsDataFrame(Colombia,aux)
+
+Tasa_Contagios <- poligonos.data$Casos/poligonos.data$Pob
+Tasa_Contagios[is.na(Tasa_Contagios)] <- 0
+Tasa_Contagios[Tasa_Contagios==Inf] <- 0
+
+windows()
+
+# mapa incidencia mes
+
+aux2<-aux
+aux2[aux2 == 0] <- NA
+class <- classIntervals(round(aux2$IA_mes,3),nclr,style="equal")
+colcode <- findColours(class,plotclr)
+plot (poligonos.data, col=colcode, border="grey", axes=T)
+title(main = "Incidencia COVID 19, Agosto 2020 ",cex=3)
+legend("bottomright",legend = names(attr(colcode,"table")),fill= attr(colcode,"palette"),cex=0.75)
+
+# mapa riesgos relativos 
+windows()
+class1 <- classIntervals(round(aux2$SRM,3),nclr,style="equal")
+spplot(poligonos.data, "SRM", at = class1$brks,col.regions=pal1)
+
+
+Tabla_agosto2020=poligonos.data@data
+Tabla_agosto2020[is.na(Tabla_agosto2020)] <- 0
+
+
+# Septiembre 2020
+
+Tabla2=as.data.frame(data %>% filter(Fecha == as.Date("2020-09-01")) 
+                     %>% arrange(desc(Cod_DIVIPOLA)) %>% select(Cod_DIVIPOLA,Pob,IA_mes,IA_Acum, Casos_Acum, Casos))
+aux= Colombia@data
+aux=as.data.frame(aux %>% select(  MpCodigo, MpNombre))
+aux$MpCodigo= as.double(aux$MpCodigo)
+Tabla2$Cod_DIVIPOLA=as.double(Tabla2$Cod_DIVIPOLA)
+aux=aux %>% left_join(Tabla2, by = c("MpCodigo" = "Cod_DIVIPOLA"))
+aux[is.na(aux)] <- 0
+
+aux$SRM=(sum(aux$Casos_Acum)/sum(aux$Pob))*(aux$Pob/aux$Casos_Acum)
+aux[aux==Inf] <- 0
+aux[is.na(aux)] <- 0
+
+
+row.names(aux) <- row.names(Colombia)
+poligonos.data <- SpatialPolygonsDataFrame(Colombia,aux)
+
+Tasa_Contagios <- poligonos.data$Casos/poligonos.data$Pob
+Tasa_Contagios[is.na(Tasa_Contagios)] <- 0
+Tasa_Contagios[Tasa_Contagios==Inf] <- 0
+
+windows()
+
+# mapa incidencia mes
+aux2<-aux
+aux2[aux2 == 0] <- NA
+class <- classIntervals(round(aux2$IA_mes,3),nclr,style="equal")
+colcode <- findColours(class,plotclr)
+plot (poligonos.data, col=colcode, border="grey", axes=T)
+title(main = "Incidencia COVID 19, Septiembre 2020 ",cex=3)
+legend("bottomright",legend = names(attr(colcode,"table")),fill= attr(colcode,"palette"),cex=0.75)
+
+# mapa riesgos relativos 
+windows()
+class1 <- classIntervals(round(aux2$SRM,3),nclr,style="equal")
+spplot(poligonos.data, "SRM", at = class1$brks,col.regions=pal1)
+
+
+Tabla_septiembre2020=poligonos.data@data
+Tabla_septiembre2020[is.na(Tabla_septiembre2020)] <- 0
+
+
+# Octubre 2020
+
+Tabla2=as.data.frame(data %>% filter(Fecha == as.Date("2020-10-01")) 
+                     %>% arrange(desc(Cod_DIVIPOLA)) %>% select(Cod_DIVIPOLA,Pob,IA_mes,IA_Acum, Casos_Acum, Casos))
+aux= Colombia@data
+aux=as.data.frame(aux %>% select(  MpCodigo, MpNombre))
+aux$MpCodigo= as.double(aux$MpCodigo)
+Tabla2$Cod_DIVIPOLA=as.double(Tabla2$Cod_DIVIPOLA)
+aux=aux %>% left_join(Tabla2, by = c("MpCodigo" = "Cod_DIVIPOLA"))
+aux[is.na(aux)] <- 0
+
+aux$SRM=(sum(aux$Casos_Acum)/sum(aux$Pob))*(aux$Pob/aux$Casos_Acum)
+aux[aux==Inf] <- 0
+aux[is.na(aux)] <- 0
+
+
+row.names(aux) <- row.names(Colombia)
+poligonos.data <- SpatialPolygonsDataFrame(Colombia,aux)
+
+Tasa_Contagios <- poligonos.data$Casos/poligonos.data$Pob
+Tasa_Contagios[is.na(Tasa_Contagios)] <- 0
+Tasa_Contagios[Tasa_Contagios==Inf] <- 0
+
+windows()
+
+# mapa incidencia mes
+
+aux2<-aux
+aux2[aux2 == 0] <- NA
+class <- classIntervals(round(aux2$IA_mes,3),nclr,style="equal")
+colcode <- findColours(class,plotclr)
+plot (poligonos.data, col=colcode, border="grey", axes=T)
+title(main = "Incidencia COVID 19, Octubre 2020 ",cex=3)
+legend("bottomright",legend = names(attr(colcode,"table")),fill= attr(colcode,"palette"),cex=0.75)
+
+# mapa riesgos relativos 
+windows()
+class1 <- classIntervals(round(aux2$SRM,3),nclr,style="equal")
+spplot(poligonos.data, "SRM", at = class1$brks,col.regions=pal1)
+
+Tabla_octubre2020=poligonos.data@data
+Tabla_octubre2020[is.na(Tabla_octubre2020)] <- 0
+
+
+
+# Noviembre 2020
+
+Tabla2=as.data.frame(data %>% filter(Fecha == as.Date("2020-11-01")) 
+                     %>% arrange(desc(Cod_DIVIPOLA)) %>% select(Cod_DIVIPOLA,Pob,IA_mes,IA_Acum, Casos_Acum, Casos))
+aux= Colombia@data
+aux=as.data.frame(aux %>% select(  MpCodigo, MpNombre))
+aux$MpCodigo= as.double(aux$MpCodigo)
+Tabla2$Cod_DIVIPOLA=as.double(Tabla2$Cod_DIVIPOLA)
+aux=aux %>% left_join(Tabla2, by = c("MpCodigo" = "Cod_DIVIPOLA"))
+aux[is.na(aux)] <- 0
+
+aux$SRM=(sum(aux$Casos_Acum)/sum(aux$Pob))*(aux$Pob/aux$Casos_Acum)
+aux[aux==Inf] <- 0
+aux[is.na(aux)] <- 0
+
+
+row.names(aux) <- row.names(Colombia)
+poligonos.data <- SpatialPolygonsDataFrame(Colombia,aux)
+
+Tasa_Contagios <- poligonos.data$Casos/poligonos.data$Pob
+Tasa_Contagios[is.na(Tasa_Contagios)] <- 0
+Tasa_Contagios[Tasa_Contagios==Inf] <- 0
+
+windows()
+
+# mapa incidencia mes
+aux2<-aux
+aux2[aux2 == 0] <- NA
+class <- classIntervals(round(aux2$IA_mes,3),nclr,style="equal")
+colcode <- findColours(class,plotclr)
+plot (poligonos.data, col=colcode, border="grey", axes=T)
+title(main = "Incidencia COVID 19, Noviembre 2020 ",cex=3)
+legend("bottomright",legend = names(attr(colcode,"table")),fill= attr(colcode,"palette"),cex=0.75)
+
+# mapa riesgos relativos 
+windows()
+class1 <- classIntervals(round(aux2$SRM,3),nclr,style="equal")
+spplot(poligonos.data, "SRM", at = class1$brks,col.regions=pal1)
+
+
+Tabla_noviembre2020=poligonos.data@data
+Tabla_noviembre2020[is.na(Tabla_noviembre2020)] <- 0
+
+# Diciembre 2020
+
+Tabla2=as.data.frame(data %>% filter(Fecha == as.Date("2020-12-01")) 
+                     %>% arrange(desc(Cod_DIVIPOLA)) %>% select(Cod_DIVIPOLA,Pob,IA_mes,IA_Acum, Casos_Acum, Casos))
+aux= Colombia@data
+aux=as.data.frame(aux %>% select(  MpCodigo, MpNombre))
+aux$MpCodigo= as.double(aux$MpCodigo)
+Tabla2$Cod_DIVIPOLA=as.double(Tabla2$Cod_DIVIPOLA)
+aux=aux %>% left_join(Tabla2, by = c("MpCodigo" = "Cod_DIVIPOLA"))
+aux[is.na(aux)] <- 0
+
+aux$SRM=(sum(aux$Casos_Acum)/sum(aux$Pob))*(aux$Pob/aux$Casos_Acum)
+aux[aux==Inf] <- 0
+aux[is.na(aux)] <- 0
+
+
+row.names(aux) <- row.names(Colombia)
+poligonos.data <- SpatialPolygonsDataFrame(Colombia,aux)
+
+Tasa_Contagios <- poligonos.data$Casos/poligonos.data$Pob
+Tasa_Contagios[is.na(Tasa_Contagios)] <- 0
+Tasa_Contagios[Tasa_Contagios==Inf] <- 0
+
+windows()
+
+# mapa incidencia mes
+aux2<-aux
+aux2[aux2 == 0] <- NA
+class <- classIntervals(round(aux2$IA_mes,3),nclr,style="equal")
+colcode <- findColours(class,plotclr)
+plot (poligonos.data, col=colcode, border="grey", axes=T)
+title(main = "Incidencia COVID 19, Diciembre 2020 ",cex=3)
+legend("bottomright",legend = names(attr(colcode,"table")),fill= attr(colcode,"palette"),cex=0.75)
+
+# mapa riesgos relativos 
+windows()
+class1 <- classIntervals(round(aux2$SRM,3),nclr,style="equal")
+spplot(poligonos.data, "SRM", at = class1$brks,col.regions=pal1)
+
+
+Tabla_diciembre2020=poligonos.data@data
+Tabla_diciembre2020[is.na(Tabla_diciembre2020)] <- 0
+
+
+# ENERO 2021
+
+Tabla2=as.data.frame(data %>% filter(Fecha == as.Date("2021-01-01")) 
+                     %>% arrange(desc(Cod_DIVIPOLA)) %>% select(Cod_DIVIPOLA,Pob,IA_mes,IA_Acum, Casos_Acum, Casos))
+aux= Colombia@data
+aux=as.data.frame(aux %>% select(  MpCodigo, MpNombre))
+aux$MpCodigo= as.double(aux$MpCodigo)
+Tabla2$Cod_DIVIPOLA=as.double(Tabla2$Cod_DIVIPOLA)
+aux=aux %>% left_join(Tabla2, by = c("MpCodigo" = "Cod_DIVIPOLA"))
+aux[is.na(aux)] <- 0
+
+aux$SRM=(sum(aux$Casos_Acum)/sum(aux$Pob))*(aux$Pob/aux$Casos_Acum)
+aux[aux==Inf] <- 0
+aux[is.na(aux)] <- 0
+
+
+row.names(aux) <- row.names(Colombia)
+poligonos.data <- SpatialPolygonsDataFrame(Colombia,aux)
+
+Tasa_Contagios <- poligonos.data$Casos/poligonos.data$Pob
+Tasa_Contagios[is.na(Tasa_Contagios)] <- 0
+Tasa_Contagios[Tasa_Contagios==Inf] <- 0
+
+windows()
+
+# mapa incidencia mes
+aux2<-aux
+aux2[aux2 == 0] <- NA
+class <- classIntervals(round(aux2$IA_mes,3),nclr,style="equal")
+colcode <- findColours(class,plotclr)
+plot (poligonos.data, col=colcode, border="grey", axes=T)
+title(main = "Incidencia COVID 19, Enero 2021 ",cex=3)
+legend("bottomright",legend = names(attr(colcode,"table")),fill= attr(colcode,"palette"),cex=0.75)
+
+# mapa riesgos relativos 
+windows()
+class1 <- classIntervals(round(aux2$SRM,3),nclr,style="equal")
+spplot(poligonos.data, "SRM", at = class1$brks,col.regions=pal1)
+
+
+Tabla_enero2021=poligonos.data@data
+Tabla_enero2021[is.na(Tabla_enero2021)] <- 0
+
+
+# FEBRERO  2021
+
+Tabla2=as.data.frame(data %>% filter(Fecha == as.Date("2021-02-01")) 
+                     %>% arrange(desc(Cod_DIVIPOLA)) %>% select(Cod_DIVIPOLA,Pob,IA_mes,IA_Acum, Casos_Acum, Casos))
+aux= Colombia@data
+aux=as.data.frame(aux %>% select(  MpCodigo, MpNombre))
+aux$MpCodigo= as.double(aux$MpCodigo)
+Tabla2$Cod_DIVIPOLA=as.double(Tabla2$Cod_DIVIPOLA)
+aux=aux %>% left_join(Tabla2, by = c("MpCodigo" = "Cod_DIVIPOLA"))
+aux[is.na(aux)] <- 0
+
+aux$SRM=(sum(aux$Casos_Acum)/sum(aux$Pob))*(aux$Pob/aux$Casos_Acum)
+aux[aux==Inf] <- 0
+aux[is.na(aux)] <- 0
+
+
+row.names(aux) <- row.names(Colombia)
+poligonos.data <- SpatialPolygonsDataFrame(Colombia,aux)
+
+Tasa_Contagios <- poligonos.data$Casos/poligonos.data$Pob
+Tasa_Contagios[is.na(Tasa_Contagios)] <- 0
+Tasa_Contagios[Tasa_Contagios==Inf] <- 0
+
+windows()
+
+# mapa incidencia mes
+aux2<-aux
+aux2[aux2 == 0] <- NA
+class <- classIntervals(round(aux2$IA_mes,3),nclr,style="equal")
+colcode <- findColours(class,plotclr)
+plot (poligonos.data, col=colcode, border="grey", axes=T)
+title(main = "Incidencia COVID 19, Febrero 2021 ",cex=3)
+legend("bottomright",legend = names(attr(colcode,"table")),fill= attr(colcode,"palette"),cex=0.75)
+
+# mapa riesgos relativos 
+windows()
+class1 <- classIntervals(round(aux2$SRM,3),nclr,style="equal")
+spplot(poligonos.data, "SRM", at = class1$brks,col.regions=pal1)
+
+
+Tabla_febrero2021=poligonos.data@data
+Tabla_febrero2021[is.na(Tabla_febrero2021)] <- 0
+
+
+# MARZO 2021
+
+Tabla2=as.data.frame(data %>% filter(Fecha == as.Date("2021-03-01")) 
+                     %>% arrange(desc(Cod_DIVIPOLA)) %>% select(Cod_DIVIPOLA,Pob,IA_mes,IA_Acum, Casos_Acum, Casos))
+aux= Colombia@data
+aux=as.data.frame(aux %>% select(  MpCodigo, MpNombre))
+aux$MpCodigo= as.double(aux$MpCodigo)
+Tabla2$Cod_DIVIPOLA=as.double(Tabla2$Cod_DIVIPOLA)
+aux=aux %>% left_join(Tabla2, by = c("MpCodigo" = "Cod_DIVIPOLA"))
+aux[is.na(aux)] <- 0
+
+aux$SRM=(sum(aux$Casos_Acum)/sum(aux$Pob))*(aux$Pob/aux$Casos_Acum)
+aux[aux==Inf] <- 0
+aux[is.na(aux)] <- 0
+
+
+row.names(aux) <- row.names(Colombia)
+poligonos.data <- SpatialPolygonsDataFrame(Colombia,aux)
+
+Tasa_Contagios <- poligonos.data$Casos/poligonos.data$Pob
+Tasa_Contagios[is.na(Tasa_Contagios)] <- 0
+Tasa_Contagios[Tasa_Contagios==Inf] <- 0
+
+windows()
+
+# mapa incidencia mes
+aux2<-aux
+aux2[aux2 == 0] <- NA
+class <- classIntervals(round(aux2$IA_mes,3),nclr,style="equal")
+colcode <- findColours(class,plotclr)
+plot (poligonos.data, col=colcode, border="grey", axes=T)
+title(main = "Incidencia COVID 19, Marzo 2021 ",cex=3)
+legend("bottomright",legend = names(attr(colcode,"table")),fill= attr(colcode,"palette"),cex=0.75)
+
+# mapa riesgos relativos 
+windows()
+class1 <- classIntervals(round(aux2$SRM,3),nclr,style="equal")
+spplot(poligonos.data, "SRM", at = class1$brks,col.regions=pal1)
+
+
+Tabla_marzo2021=poligonos.data@data
+Tabla_marzo2021[is.na(Tabla_marzo2021)] <- 0
+
+
+
+# ABRIL 2021
+
+Tabla2=as.data.frame(data %>% filter(Fecha == as.Date("2021-04-01")) 
+                     %>% arrange(desc(Cod_DIVIPOLA)) %>% select(Cod_DIVIPOLA,Pob,IA_mes,IA_Acum, Casos_Acum, Casos))
+aux= Colombia@data
+aux=as.data.frame(aux %>% select(  MpCodigo, MpNombre))
+aux$MpCodigo= as.double(aux$MpCodigo)
+Tabla2$Cod_DIVIPOLA=as.double(Tabla2$Cod_DIVIPOLA)
+aux=aux %>% left_join(Tabla2, by = c("MpCodigo" = "Cod_DIVIPOLA"))
+aux[is.na(aux)] <- 0
+
+aux$SRM=(sum(aux$Casos_Acum)/sum(aux$Pob))*(aux$Pob/aux$Casos_Acum)
+aux[aux==Inf] <- 0
+aux[is.na(aux)] <- 0
+
+
+row.names(aux) <- row.names(Colombia)
+poligonos.data <- SpatialPolygonsDataFrame(Colombia,aux)
+
+Tasa_Contagios <- poligonos.data$Casos/poligonos.data$Pob
+Tasa_Contagios[is.na(Tasa_Contagios)] <- 0
+Tasa_Contagios[Tasa_Contagios==Inf] <- 0
+
+windows()
+
+# mapa incidencia mes
+aux2<-aux
+aux2[aux2 == 0] <- NA
+class <- classIntervals(round(aux2$IA_mes,3),nclr,style="equal")
+colcode <- findColours(class,plotclr)
+plot (poligonos.data, col=colcode, border="grey", axes=T)
+title(main = "Incidencia COVID 19, Abril 2021 ",cex=3)
+legend("bottomright",legend = names(attr(colcode,"table")),fill= attr(colcode,"palette"),cex=0.75)
+
+# mapa riesgos relativos 
+windows()
+class1 <- classIntervals(round(aux2$SRM,3),nclr,style="equal")
+spplot(poligonos.data, "SRM", at = class1$brks,col.regions=pal1)
+
+
+Tabla_abril2021=poligonos.data@data
+Tabla_abril2021[is.na(Tabla_abril2021)] <- 0
+
+
+
+
+# MAYO 2021
+
+Tabla2=as.data.frame(data %>% filter(Fecha == as.Date("2021-05-01")) 
+                     %>% arrange(desc(Cod_DIVIPOLA)) %>% select(Cod_DIVIPOLA,Pob,IA_mes,IA_Acum, Casos_Acum, Casos))
+aux= Colombia@data
+aux=as.data.frame(aux %>% select(  MpCodigo, MpNombre))
+aux$MpCodigo= as.double(aux$MpCodigo)
+Tabla2$Cod_DIVIPOLA=as.double(Tabla2$Cod_DIVIPOLA)
+aux=aux %>% left_join(Tabla2, by = c("MpCodigo" = "Cod_DIVIPOLA"))
+aux[is.na(aux)] <- 0
+
+aux$SRM=(sum(aux$Casos_Acum)/sum(aux$Pob))*(aux$Pob/aux$Casos_Acum)
+aux[aux==Inf] <- 0
+aux[is.na(aux)] <- 0
+
+
+row.names(aux) <- row.names(Colombia)
+poligonos.data <- SpatialPolygonsDataFrame(Colombia,aux)
+
+Tasa_Contagios <- poligonos.data$Casos/poligonos.data$Pob
+Tasa_Contagios[is.na(Tasa_Contagios)] <- 0
+Tasa_Contagios[Tasa_Contagios==Inf] <- 0
+
+windows()
+
+# mapa incidencia mes
+
+aux2<-aux
+aux2[aux2 == 0] <- NA
+class <- classIntervals(round(aux2$IA_mes,3),nclr,style="equal")
+colcode <- findColours(class,plotclr)
+plot (poligonos.data, col=colcode, border="grey", axes=T)
+title(main = "Incidencia COVID 19, Mayo 2021 ",cex=3)
+legend("bottomright",legend = names(attr(colcode,"table")),fill= attr(colcode,"palette"),cex=0.75)
+
+# mapa riesgos relativos 
+windows()
+class1 <- classIntervals(round(aux2$SRM,3),nclr,style="equal")
+spplot(poligonos.data, "SRM", at = class1$brks,col.regions=pal1)
+
+
+Tabla_mayo2021=poligonos.data@data
+Tabla_mayo2021[is.na(Tabla_mayo2021)] <- 0
+
+
+
+# JUNIO 2021
+
+Tabla2=as.data.frame(data %>% filter(Fecha == as.Date("2021-06-01")) 
+                     %>% arrange(desc(Cod_DIVIPOLA)) %>% select(Cod_DIVIPOLA,Pob,IA_mes,IA_Acum, Casos_Acum, Casos))
+aux= Colombia@data
+aux=as.data.frame(aux %>% select(  MpCodigo, MpNombre))
+aux$MpCodigo= as.double(aux$MpCodigo)
+Tabla2$Cod_DIVIPOLA=as.double(Tabla2$Cod_DIVIPOLA)
+aux=aux %>% left_join(Tabla2, by = c("MpCodigo" = "Cod_DIVIPOLA"))
+aux[is.na(aux)] <- 0
+
+aux$SRM=(sum(aux$Casos_Acum)/sum(aux$Pob))*(aux$Pob/aux$Casos_Acum)
+aux[aux==Inf] <- 0
+aux[is.na(aux)] <- 0
+
+
+row.names(aux) <- row.names(Colombia)
+poligonos.data <- SpatialPolygonsDataFrame(Colombia,aux)
+
+Tasa_Contagios <- poligonos.data$Casos/poligonos.data$Pob
+Tasa_Contagios[is.na(Tasa_Contagios)] <- 0
+Tasa_Contagios[Tasa_Contagios==Inf] <- 0
+
+windows()
+
+# mapa incidencia mes
+aux2<-aux
+aux2[aux2 == 0] <- NA
+class <- classIntervals(round(aux2$IA_mes,3),nclr,style="equal")
+colcode <- findColours(class,plotclr)
+plot (poligonos.data, col=colcode, border="grey", axes=T)
+title(main = "Incidencia COVID 19, Junio 2021 ",cex=3)
+legend("bottomright",legend = names(attr(colcode,"table")),fill= attr(colcode,"palette"),cex=0.75)
+
+# mapa riesgos relativos 
+windows()
+class1 <- classIntervals(round(aux2$SRM,3),nclr,style="equal")
+spplot(poligonos.data, "SRM", at = class1$brks,col.regions=pal1)
+
+
+Tabla_junio2021=poligonos.data@data
+Tabla_junio2021[is.na(Tabla_junio2021)] <- 0
+
+
+
+# JULIO 2021
+
+Tabla2=as.data.frame(data %>% filter(Fecha == as.Date("2021-07-01")) 
+                     %>% arrange(desc(Cod_DIVIPOLA)) %>% select(Cod_DIVIPOLA,Pob,IA_mes,IA_Acum, Casos_Acum, Casos))
+aux= Colombia@data
+aux=as.data.frame(aux %>% select(  MpCodigo, MpNombre))
+aux$MpCodigo= as.double(aux$MpCodigo)
+Tabla2$Cod_DIVIPOLA=as.double(Tabla2$Cod_DIVIPOLA)
+aux=aux %>% left_join(Tabla2, by = c("MpCodigo" = "Cod_DIVIPOLA"))
+aux[is.na(aux)] <- 0
+
+aux$SRM=(sum(aux$Casos_Acum)/sum(aux$Pob))*(aux$Pob/aux$Casos_Acum)
+aux[aux==Inf] <- 0
+aux[is.na(aux)] <- 0
+
+
+row.names(aux) <- row.names(Colombia)
+poligonos.data <- SpatialPolygonsDataFrame(Colombia,aux)
+
+Tasa_Contagios <- poligonos.data$Casos/poligonos.data$Pob
+Tasa_Contagios[is.na(Tasa_Contagios)] <- 0
+Tasa_Contagios[Tasa_Contagios==Inf] <- 0
+
+windows()
+
+# mapa incidencia mes
+aux2<-aux
+aux2[aux2 == 0] <- NA
+class <- classIntervals(round(aux2$IA_mes,3),nclr,style="equal")
+colcode <- findColours(class,plotclr)
+plot (poligonos.data, col=colcode, border="grey", axes=T)
+title(main = "Incidencia COVID 19, Julio 2021 ",cex=3)
+legend("bottomright",legend = names(attr(colcode,"table")),fill= attr(colcode,"palette"),cex=0.75)
+
+# mapa riesgos relativos 
+windows()
+class1 <- classIntervals(round(aux2$SRM,3),nclr,style="equal")
+spplot(poligonos.data, "SRM", at = class1$brks,col.regions=pal1)
+
+
+Tabla_julio2021=poligonos.data@data
+Tabla_julio2021[is.na(Tabla_julio2021)] <- 0
+
+
+
+
+# AGOSTO 2021
+
+Tabla2=as.data.frame(data %>% filter(Fecha == as.Date("2021-08-01")) 
+                     %>% arrange(desc(Cod_DIVIPOLA)) %>% select(Cod_DIVIPOLA,Pob,IA_mes,IA_Acum, Casos_Acum, Casos))
+aux= Colombia@data
+aux=as.data.frame(aux %>% select(  MpCodigo, MpNombre))
+aux$MpCodigo= as.double(aux$MpCodigo)
+Tabla2$Cod_DIVIPOLA=as.double(Tabla2$Cod_DIVIPOLA)
+aux=aux %>% left_join(Tabla2, by = c("MpCodigo" = "Cod_DIVIPOLA"))
+aux[is.na(aux)] <- 0
+
+aux$SRM=(sum(aux$Casos_Acum)/sum(aux$Pob))*(aux$Pob/aux$Casos_Acum)
+aux[aux==Inf] <- 0
+aux[is.na(aux)] <- 0
+
+
+row.names(aux) <- row.names(Colombia)
+poligonos.data <- SpatialPolygonsDataFrame(Colombia,aux)
+
+Tasa_Contagios <- poligonos.data$Casos/poligonos.data$Pob
+Tasa_Contagios[is.na(Tasa_Contagios)] <- 0
+Tasa_Contagios[Tasa_Contagios==Inf] <- 0
+
+windows()
+
+# mapa incidencia mes
+aux2<-aux
+aux2[aux2 == 0] <- NA
+class <- classIntervals(round(aux2$IA_mes,3),nclr,style="equal")
+colcode <- findColours(class,plotclr)
+plot (poligonos.data, col=colcode, border="grey", axes=T)
+title(main = "Incidencia COVID 19, Agosto 2021 ",cex=3)
+legend("bottomright",legend = names(attr(colcode,"table")),fill= attr(colcode,"palette"),cex=0.75)
+
+# mapa riesgos relativos 
+windows()
+class1 <- classIntervals(round(aux2$SRM,3),nclr,style="equal")
+spplot(poligonos.data, "SRM", at = class1$brks,col.regions=pal1)
+
+
+Tabla_agosto2021=poligonos.data@data
+Tabla_agosto2021[is.na(Tabla_agosto2021)] <- 0
+
+
+
+# SEPTIEMBRE 2021
+
+Tabla2=as.data.frame(data %>% filter(Fecha == as.Date("2021-09-01")) 
+                     %>% arrange(desc(Cod_DIVIPOLA)) %>% select(Cod_DIVIPOLA,Pob,IA_mes,IA_Acum, Casos_Acum, Casos))
+aux= Colombia@data
+aux=as.data.frame(aux %>% select(  MpCodigo, MpNombre))
+aux$MpCodigo= as.double(aux$MpCodigo)
+Tabla2$Cod_DIVIPOLA=as.double(Tabla2$Cod_DIVIPOLA)
+aux=aux %>% left_join(Tabla2, by = c("MpCodigo" = "Cod_DIVIPOLA"))
+aux[is.na(aux)] <- 0
+
+aux$SRM=(sum(aux$Casos_Acum)/sum(aux$Pob))*(aux$Pob/aux$Casos_Acum)
+aux[aux==Inf] <- 0
+aux[is.na(aux)] <- 0
+
+
+row.names(aux) <- row.names(Colombia)
+poligonos.data <- SpatialPolygonsDataFrame(Colombia,aux)
+
+Tasa_Contagios <- poligonos.data$Casos/poligonos.data$Pob
+Tasa_Contagios[is.na(Tasa_Contagios)] <- 0
+Tasa_Contagios[Tasa_Contagios==Inf] <- 0
+
+windows()
+
+# mapa incidencia mes
+aux2<-aux
+aux2[aux2 == 0] <- NA
+class <- classIntervals(round(aux2$IA_mes,3),nclr,style="equal")
+colcode <- findColours(class,plotclr)
+plot (poligonos.data, col=colcode, border="grey", axes=T)
+title(main = "Incidencia COVID 19, Septiembre 2021 ",cex=3)
+legend("bottomright",legend = names(attr(colcode,"table")),fill= attr(colcode,"palette"),cex=0.75)
+
+# mapa riesgos relativos 
+windows()
+class1 <- classIntervals(round(aux2$SRM,3),nclr,style="equal")
+spplot(poligonos.data, "SRM", at = class1$brks,col.regions=pal1)
+
+
+Tabla_septiembre2021=poligonos.data@data
+Tabla_septiembre2021[is.na(Tabla_septiembre2021)] <- 0
+
+
+
+# OCTUBRE 2021
+
+Tabla2=as.data.frame(data %>% filter(Fecha == as.Date("2021-10-01")) 
+                     %>% arrange(desc(Cod_DIVIPOLA)) %>% select(Cod_DIVIPOLA,Pob,IA_mes,IA_Acum, Casos_Acum, Casos))
+aux= Colombia@data
+aux=as.data.frame(aux %>% select(  MpCodigo, MpNombre))
+aux$MpCodigo= as.double(aux$MpCodigo)
+Tabla2$Cod_DIVIPOLA=as.double(Tabla2$Cod_DIVIPOLA)
+aux=aux %>% left_join(Tabla2, by = c("MpCodigo" = "Cod_DIVIPOLA"))
+aux[is.na(aux)] <- 0
+
+aux$SRM=(sum(aux$Casos_Acum)/sum(aux$Pob))*(aux$Pob/aux$Casos_Acum)
+aux[aux==Inf] <- 0
+aux[is.na(aux)] <- 0
+
+
+row.names(aux) <- row.names(Colombia)
+poligonos.data <- SpatialPolygonsDataFrame(Colombia,aux)
+
+Tasa_Contagios <- poligonos.data$Casos/poligonos.data$Pob
+Tasa_Contagios[is.na(Tasa_Contagios)] <- 0
+Tasa_Contagios[Tasa_Contagios==Inf] <- 0
+
+windows()
+
+# mapa incidencia mes
+aux2<-aux
+aux2[aux2 == 0] <- NA
+class <- classIntervals(round(aux2$IA_mes,3),nclr,style="equal")
+colcode <- findColours(class,plotclr)
+plot (poligonos.data, col=colcode, border="grey", axes=T)
+title(main = "Incidencia COVID 19, Octubre 2021 ",cex=3)
+legend("bottomright",legend = names(attr(colcode,"table")),fill= attr(colcode,"palette"),cex=0.75)
+
+# mapa riesgos relativos 
+windows()
+class1 <- classIntervals(round(aux2$SRM,3),nclr,style="equal")
+spplot(poligonos.data, "SRM", at = class1$brks,col.regions=pal1)
+
+
+Tabla_octubre2021=poligonos.data@data
+Tabla_octubre2021[is.na(Tabla_octubre2021)] <- 0
+
+
+
+# NOVIEMBRE 2021
+
+Tabla2=as.data.frame(data %>% filter(Fecha == as.Date("2021-11-01")) 
+                     %>% arrange(desc(Cod_DIVIPOLA)) %>% select(Cod_DIVIPOLA,Pob,IA_mes,IA_Acum, Casos_Acum, Casos))
+aux= Colombia@data
+aux=as.data.frame(aux %>% select(  MpCodigo, MpNombre))
+aux$MpCodigo= as.double(aux$MpCodigo)
+Tabla2$Cod_DIVIPOLA=as.double(Tabla2$Cod_DIVIPOLA)
+aux=aux %>% left_join(Tabla2, by = c("MpCodigo" = "Cod_DIVIPOLA"))
+aux[is.na(aux)] <- 0
+
+
+aux[aux==Inf] <- 0
+aux[is.na(aux)] <- 0
+
+
+row.names(aux) <- row.names(Colombia)
+poligonos.data <- SpatialPolygonsDataFrame(Colombia,aux)
+
+Tasa_Contagios <- poligonos.data$Casos/poligonos.data$Pob
+Tasa_Contagios[is.na(Tasa_Contagios)] <- 0
+Tasa_Contagios[Tasa_Contagios==Inf] <- 0
+
+windows()
+
+# mapa incidencia mes
+aux2<-aux
+aux2[aux2 == 0] <- NA
+class <- classIntervals(round(aux2$IA_mes,3),nclr,style="equal")
+colcode <- findColours(class,plotclr)
+plot (poligonos.data, col=colcode, border="grey", axes=T)
+title(main = "Incidencia COVID 19, Noviembre 2021 ",cex=3)
+legend("bottomright",legend = names(attr(colcode,"table")),fill= attr(colcode,"palette"),cex=0.75)
+
+# mapa riesgos relativos 
+windows()
+class1 <- classIntervals(round(aux2$SRM,3),nclr,style="equal")
+spplot(poligonos.data, "SRM", at = class1$brks,col.regions=pal1)
+
+
+Tabla_noviembre2021=poligonos.data@data
+Tabla_noviembre2021[is.na(Tabla_noviembre2021)] <- 0
+
+
+
+# DICIEMBRE 2021
+
+Tabla2=as.data.frame(data %>% filter(Fecha == as.Date("2021-12-01")) 
+                     %>% arrange(desc(Cod_DIVIPOLA)) %>% select(Cod_DIVIPOLA,Pob,IA_mes,IA_Acum, Casos_Acum, Casos))
+aux= Colombia@data
+aux=as.data.frame(aux %>% select(  MpCodigo, MpNombre))
+aux$MpCodigo= as.double(aux$MpCodigo)
+Tabla2$Cod_DIVIPOLA=as.double(Tabla2$Cod_DIVIPOLA)
+aux=aux %>% left_join(Tabla2, by = c("MpCodigo" = "Cod_DIVIPOLA"))
+aux[is.na(aux)] <- 0
+
+aux$SRM=(sum(aux$Casos_Acum)/sum(aux$Pob))*(aux$Pob/aux$Casos_Acum)
+aux[aux==Inf] <- 0
+aux[is.na(aux)] <- 0
+
+
+row.names(aux) <- row.names(Colombia)
+poligonos.data <- SpatialPolygonsDataFrame(Colombia,aux)
+
+Tasa_Contagios <- poligonos.data$Casos/poligonos.data$Pob
+Tasa_Contagios[is.na(Tasa_Contagios)] <- 0
+Tasa_Contagios[Tasa_Contagios==Inf] <- 0
+
+windows()
+
+# mapa incidencia mes
+aux2<-aux
+aux2[aux2 == 0] <- NA
+class <- classIntervals(round(aux2$IA_mes,3),nclr,style="equal")
+colcode <- findColours(class,plotclr)
+plot (poligonos.data, col=colcode, border="grey", axes=T)
+title(main = "Incidencia COVID 19, Diciembre 2021 ",cex=3)
+legend("bottomright",legend = names(attr(colcode,"table")),fill= attr(colcode,"palette"),cex=0.75)
+
+# mapa riesgos relativos 
+windows()
+class1 <- classIntervals(round(aux2$SRM,3),nclr,style="equal")
+spplot(poligonos.data, "SRM", at = class1$brks,col.regions=pal1)
+
+
+Tabla_diciembre2021=poligonos.data@data
+Tabla_diciembre2021[is.na(Tabla_diciembre2021)] <- 0
+
+
+
+# Using weight to simulate spatial autocorrelation
+#InvIrW Function, spatial autorrelacion
+set.seed(987654)
+n <- length(Colombia.nb)
+uncorr_x <- rnorm(n)
+rho <- 0.5
+autocorr_x <- invIrW(Co0_lw_W, rho) %*% uncorr_x
+windows()
+plot(autocorr_x)
+
+# Moran Test
+moran_u <- moran.test(uncorr_x, listw = Co0_lw_W,zero.policy=TRUE)
+moran_a <- moran.test(autocorr_x, listw = Co0_lw_W,zero.policy=TRUE)
+moran_a1 <- moran.test(autocorr_x, listw = nb2listw(Co9_nb,style = "W"),zero.policy=TRUE)
+
+et1 <- coords1[, 1] - min(coords1[, 1])
+trend_x1 <- uncorr_x + 0.00025 * et1
+moran_t1 <- moran.test(trend_x1, listw = Co0_lw_W,zero.policy=TRUE)
+# Interpretacion 
+moran_t11 <- lm.morantest(lm(trend_x1 ~ et1), listw = Co0_lw_W,zero.policy=TRUE)
+
+
+
+Tabla_marzo2020[is.na(Tabla_marzo2020)] <- 0
+Tabla_abril2020 [is.na(Tabla_abril2020)]<- 0
+Tabla_mayo2020[is.na(Tabla_mayo2020)]<- 0
+Tabla_junio2020 [is.na(Tabla_junio2020)]<- 0
+Tabla_julio2020[is.na(Tabla_julio2020)] <- 0
+Tabla_agosto2020[is.na(Tabla_agosto2020)] <- 0
+Tabla_septiembre2020[is.na(Tabla_septiembre2020)] <- 0
+Tabla_octubre2020[is.na(Tabla_octubre2020)] <- 0
+Tabla_noviembre2020[is.na(Tabla_noviembre2020)] <- 0
+Tabla_diciembre2020[is.na(Tabla_diciembre2020)] <- 0
+Tabla_enero2021[is.na(Tabla_enero2021)] <- 0
+Tabla_febrero2021[is.na(Tabla_febrero2021)] <- 0
+Tabla_marzo2021[is.na(Tabla_marzo2021)] <- 0
+Tabla_abril2021 [is.na(Tabla_abril2021)]<- 0
+Tabla_mayo2021[is.na(Tabla_mayo2021)]<- 0
+Tabla_junio2021 [is.na(Tabla_junio2021)]<- 0
+Tabla_julio2021[is.na(Tabla_julio2021)] <- 0
+Tabla_agosto2021[is.na(Tabla_agosto2021)] <- 0
+Tabla_septiembre2021[is.na(Tabla_septiembre2021)] <- 0
+Tabla_octubre2021[is.na(Tabla_octubre2021)] <- 0
+Tabla_noviembre2021[is.na(Tabla_noviembre2021)] <- 0
+Tabla_diciembre2021[is.na(Tabla_diciembre2021)] <- 0
+
+m_test_marzo2020<-moran.test(Tabla_marzo2020$IA_mes, listw = Co0_lw_W,zero.policy=TRUE)
+m_test_abril2020<-moran.test(Tabla_abril2020$IA_mes, listw = Co0_lw_W,zero.policy=TRUE)
+m_test_mayo2020<-moran.test(Tabla_mayo2020$IA_mes, listw = Co0_lw_W,zero.policy=TRUE)
+m_test_junio2020<-moran.test(Tabla_junio2020$IA_mes, listw = Co0_lw_W,zero.policy=TRUE)
+m_test_julio2020<-moran.test(Tabla_julio2020$IA_mes, listw =nb2listw(Colombia.nb,zero.policy=TRUE),zero.policy=TRUE)
+m_test_agosto2020<-moran.test(Tabla_agosto2020$IA_mes, listw =nb2listw(Colombia.nb,zero.policy=TRUE),zero.policy=TRUE)
+m_test_septiembre2020<-moran.test(Tabla_septiembre2020$IA_mes, listw =nb2listw(Colombia.nb,zero.policy=TRUE),zero.policy=TRUE)
+m_test_octubre2020<-moran.test(Tabla_octubre2020$IA_mes, listw =nb2listw(Colombia.nb,zero.policy=TRUE),zero.policy=TRUE)
+m_test_noviembre2020<-moran.test(Tabla_noviembre2020$IA_mes, listw =nb2listw(Colombia.nb,zero.policy=TRUE),zero.policy=TRUE)
+m_test_diciembre2020<-moran.test(Tabla_diciembre2020$IA_mes, listw =nb2listw(Colombia.nb,zero.policy=TRUE),zero.policy=TRUE)
+m_test_enero2021<-moran.test(Tabla_enero2021$IA_mes, listw =nb2listw(Colombia.nb,zero.policy=TRUE),zero.policy=TRUE)
+m_test_febrero2021<-moran.test(Tabla_febrero2021$IA_mes, listw = Co0_lw_W,zero.policy=TRUE)
+m_test_marzo2021<-moran.test(Tabla_marzo2021$IA_mes, listw = Co0_lw_W,zero.policy=TRUE)
+m_test_abril2021<-moran.test(Tabla_abril2021$IA_mes, listw = Co0_lw_W,zero.policy=TRUE)
+m_test_mayo2021<-moran.test(Tabla_mayo2021$IA_mes, listw = Co0_lw_W,zero.policy=TRUE)
+m_test_junio2021<-moran.test(Tabla_junio2021$IA_mes, listw = Co0_lw_W,zero.policy=TRUE)
+m_test_julio2021<-moran.test(Tabla_julio2021$IA_mes, listw =nb2listw(Colombia.nb,zero.policy=TRUE),zero.policy=TRUE)
+m_test_agosto2021<-moran.test(Tabla_agosto2021$IA_mes, listw =nb2listw(Colombia.nb,zero.policy=TRUE),zero.policy=TRUE)
+m_test_septiembre2021<-moran.test(Tabla_septiembre2021$IA_mes, listw =nb2listw(Colombia.nb,zero.policy=TRUE),zero.policy=TRUE)
+m_test_octubre2021<-moran.test(Tabla_octubre2021$IA_mes, listw =nb2listw(Colombia.nb,zero.policy=TRUE),zero.policy=TRUE)
+m_test_noviembre2021<-moran.test(Tabla_noviembre2021$IA_mes, listw =nb2listw(Colombia.nb,zero.policy=TRUE),zero.policy=TRUE)
+m_test_diciembre2021<-moran.test(Tabla_diciembre2021$IA_mes, listw =nb2listw(Colombia.nb,zero.policy=TRUE),zero.policy=TRUE)
+
+# Choose an style B,C,W,U, S # B está estandarizado globalmente (sumas de todos los enlaces a n)
+lw_B <- nb2listw(Colombia.nb, style = "B",zero.policy=FALSE)
+print(lw_B,zero.policy=FALSE)
+
+moran.test(Tabla_marzo2020$IA_mes, listw = lw_B,zero.policy=FALSE)
+moran.test(Tabla_abril2020$IA_mes, listw = lw_B,zero.policy=FALSE)
+moran.test(Tabla_mayo2020$IA_mes, listw = lw_B,zero.policy=FALSE)
+moran.test(Tabla_junio2020$IA_mes, listw = lw_B,zero.policy=FALSE)
+moran.test(Tabla_julio2020$IA_mes, listw = lw_B,zero.policy=FALSE)
+moran.test(Tabla_agosto2020$IA_mes, listw = lw_B,zero.policy=FALSE)
+moran.test(Tabla_septiembre2020$IA_mes, listw = lw_B,zero.policy=FALSE)
+moran.test(Tabla_octubre2020$IA_mes, listw = lw_B,zero.policy=FALSE)
+moran.test(Tabla_noviembre2020$IA_mes, listw = lw_B,zero.policy=FALSE)
+moran.test(Tabla_diciembre2020$IA_mes, listw = lw_B,zero.policy=FALSE)
+moran.test(Tabla_enero2021$IA_mes, listw = lw_B,zero.policy=FALSE)
+moran.test(Tabla_febrero2021$IA_mes, listw = lw_B,zero.policy=FALSE)
+moran.test(Tabla_marzo2021$IA_mes, listw = lw_B,zero.policy=FALSE)
+moran.test(Tabla_abril2021$IA_mes, listw = lw_B,zero.policy=FALSE)
+moran.test(Tabla_mayo2021$IA_mes, listw = lw_B,zero.policy=FALSE)
+moran.test(Tabla_junio2021$IA_mes, listw = lw_B,zero.policy=FALSE)
+moran.test(Tabla_julio2021$IA_mes, listw = lw_B,zero.policy=FALSE)
+moran.test(Tabla_agosto2021$IA_mes, listw = lw_B,zero.policy=FALSE)
+moran.test(Tabla_septiembre2021$IA_mes, listw = lw_B,zero.policy=FALSE)
+moran.test(Tabla_octubre2021$IA_mes, listw = lw_B,zero.policy=FALSE)
+moran.test(Tabla_noviembre2021$IA_mes, listw = lw_B,zero.policy=FALSE)
+moran.test(Tabla_diciembre2021$IA_mes, listw = lw_B,zero.policy=TRUE)
+
+
+
+# Local Test
+
+windows()
+?moran.plot
+
+moran.plot(Tabla_marzo2020$IA_mes, listw = lw_B,zero.policy=FALSE )
+moran.plot(Tabla_abril2020$IA_mes, listw = lw_B,zero.policy=FALSE )
+moran.plot(Tabla_mayo2020$IA_mes, listw = lw_B,zero.policy=FALSE )
+moran.plot(Tabla_junio2020$IA_mes, listw = lw_B,zero.policy=FALSE )
+moran.plot(Tabla_julio2020$IA_mes, listw = lw_B,zero.policy=FALSE )
+moran.plot(Tabla_agosto2020$IA_mes, listw = lw_B,zero.policy=FALSE )
+moran.plot(Tabla_septiembre2020$IA_mes, listw = lw_B,zero.policy=FALSE )
+moran.plot(Tabla_octubre2020$IA_mes, listw = lw_B,zero.policy=FALSE )
+moran.plot(Tabla_noviembre2020$IA_mes, listw = lw_B,zero.policy=FALSE )
+moran.plot(Tabla_diciembre2020$IA_mes, listw = lw_B,zero.policy=FALSE )
+moran.plot(Tabla_enero2021$IA_mes, listw = lw_B,zero.policy=FALSE )
+moran.plot(Tabla_febrero2021$IA_mes, listw = lw_B,zero.policy=FALSE )
+moran.plot(Tabla_marzo2021$IA_mes, listw = lw_B,zero.policy=FALSE )
+moran.plot(Tabla_abril2021$IA_mes, listw = lw_B,zero.policy=FALSE )
+moran.plot(Tabla_mayo2021$IA_mes, listw = lw_B,zero.policy=FALSE )
+moran.plot(Tabla_junio2021$IA_mes, listw = lw_B,zero.policy=FALSE )
+moran.plot(Tabla_julio2021$IA_mes, listw = lw_B,zero.policy=FALSE )
+moran.plot(Tabla_agosto2021$IA_mes, listw = lw_B,zero.policy=FALSE )
+moran.plot(Tabla_septiembre2021$IA_mes, listw = lw_B,zero.policy=FALSE )
+moran.plot(Tabla_octubre2021$IA_mes, listw = lw_B,zero.policy=FALSE )
+moran.plot(Tabla_noviembre2021$IA_mes, listw = lw_B,zero.policy=FALSE )
+moran.plot(Tabla_diciembre2021$IA_mes, listw = lw_B,zero.policy=FALSE )
+
+
+
+
+lm1 <- localmoran(Tabla_marzo2020$IA_mes, listw = lw_B, zero.policy=FALSE)
+lm2 <- as.data.frame(localmoran.sad(lm(Tabla_marzo2020$IA_mes ~ 1), nb = Colombia.nb, style = "C", zero.policy=FALSE))
+lm3 <- as.data.frame(localmoran.exact(lm(Tabla_marzo2020$IA_mes ~ 1),nb = Colombia.nb, style = "C", zero.policy=TRUE))
+
+
+
+
+# mayor incidencia  objetivo 1 
+
+#Incidemcia  a nivel de serie de tiempo en ciudades
+# serie de tiempo porp principales ciudades
+# correlaciones# temporal, por ciudades
+
+# Analisis de correlaci?n cruzada
+
+
+marzo_diez <- data %>%  filter(ID.year== "1") %>% 
+ arrange(desc(IA_mes))%>%
+  slice(1:10)
+
+
+data10 <- data %>%
+  group_by(year) %>%
+  top_n(10, IA_mes)
+
+
+Casos_Rionegro<- data %>%  filter(Cod_DIVIPOLA== "5615")
+Casos_Barranquilla<- data %>%  filter(Cod_DIVIPOLA== "8001")
+Casos_Barrancabermeja<- data %>%  filter(Cod_DIVIPOLA== "68081")
+Casos_Santo_Tomas<- data %>%  filter(Cod_DIVIPOLA== "8685")
+Casos_Neiva<- data %>%  filter(Cod_DIVIPOLA== "41001")
+Casos_Bucaramanga<- data %>%  filter(Cod_DIVIPOLA== "68001")
+Casos_Puerto_Colombia<- data %>%  filter(Cod_DIVIPOLA== "8573")
+Casos_Bogota<- data %>%  filter(Cod_DIVIPOLA== "11001")
+Casos_Medellin<- data %>%  filter(Cod_DIVIPOLA== "5001")
+Casos_Caldas<- data %>%  filter(Cod_DIVIPOLA== "5129")
+
+
+
+Casos_Rionegro_ts<- ts(Casos_Rionegro)
+Casos_Barranquilla_ts<- ts(Casos_Barranquilla)
+Casos_Barrancabermeja_ts<-ts(Casos_Barrancabermeja) 
+Casos_Santo_Tomas_ts<- ts(Casos_Santo_Tomas) 
+Casos_Neiva_ts<- ts(Casos_Neiva) 
+Casos_Bucaramanga_ts<- ts(Casos_Bucaramanga) 
+Casos_Puerto_Colombia_ts<- ts(Casos_Puerto_Colombia) 
+Casos_Bogota_ts<- ts(Casos_Bogota) 
+Casos_Medellin_ts<- ts(Casos_Medellin) 
+Casos_Caldas_ts<- ts(Casos_Caldas) 
+
+
+
+
+
+windows()
+tsplot(Casos_Rionegro_ts[,48], ylab="Incidencia COVID_19", lwd=2, col="blue")
+lines(Casos_Barranquilla_ts[,48], lwd=2, col="red")
+lines(Casos_Santo_Tomas_ts[,48], lwd=2, col="grey")
+lines(Casos_Neiva_ts[,48], lwd=2, col="black")
+lines(Casos_Bucaramanga_ts[,48], lwd=2, col="chartreuse")
+lines(Casos_Puerto_Colombia_ts[,48], lwd=2, col="darkorange1")
+lines(Casos_Bogota_ts[,48], lwd=2, col="deeppink2")
+lines(Casos_Medellin_ts[,48], lwd=2, col="darkgreen")
+lines(Casos_Caldas_ts[,48], lwd=2, col="pink")
+legend('bottomright', col=c("blue","red","grey","black","chartreuse","darkorange1","deeppink2", "darkgreen", "pink" ), lwd=2, 
+       legend=c("Rionegro", "Barranquilla","Santo_Tomas","Neiva","Bucaramanga","Puerto Colombia","Bogotá D.c." , "Medellin", "Caldas"), bg='white') 
+
+
+
+windows()
+tsplot(Casos_Rionegro_ts[,47], ylab="Incidencia mes COVID_19", lwd=2, col="blue")
+lines(Casos_Barranquilla_ts[,47], lwd=2, col="red")
+lines(Casos_Santo_Tomas_ts[,47], lwd=2, col="grey")
+lines(Casos_Neiva_ts[,47], lwd=2, col="black")
+lines(Casos_Bucaramanga_ts[,47], lwd=2, col="chartreuse")
+lines(Casos_Puerto_Colombia_ts[,47], lwd=2, col="darkorange1")
+lines(Casos_Bogota_ts[,47], lwd=2, col="deeppink2")
+lines(Casos_Medellin_ts[,47], lwd=2, col="darkgreen")
+lines(Casos_Caldas_ts[,47], lwd=2, col="pink")
+legend('bottomright', col=c("blue","red","grey","black","chartreuse","darkorange1","deeppink2", "darkgreen", "pink" ), lwd=2, 
+       legend=c("Rionegro", "Barranquilla","Santo_Tomas","Neiva","Bucaramanga","Puerto Colombia","Medellin" , "Medellin", "Caldas"), bg='white') 
+
+
+
+windows()
+tsplot(Casos_Rionegro_ts[,44], ylab="Cobertura de vacunacion COVID 19", lwd=2, col="blue")
+lines(Casos_Barranquilla_ts[,44], lwd=2, col="red")
+lines(Casos_Santo_Tomas_ts[,44], lwd=2, col="grey")
+lines(Casos_Neiva_ts[,44], lwd=2, col="black")
+lines(Casos_Bucaramanga_ts[,44], lwd=2, col="chartreuse")
+lines(Casos_Puerto_Colombia_ts[,44], lwd=2, col="darkorange1")
+lines(Casos_Bogota_ts[,44], lwd=2, col="deeppink2")
+lines(Casos_Medellin_ts[,44], lwd=2, col="darkgreen")
+lines(Casos_Caldas_ts[,44], lwd=2, col="pink")
+legend('bottomright', col=c("blue","red","grey","black","chartreuse","darkorange1","deeppink2", "darkgreen", "pink" ), lwd=2, 
+       legend=c("Rionegro", "Barranquilla","Santo_Tomas","Neiva","Bucaramanga","Puerto_Colombia","Bogota" , "Medellin", "Caldas"), bg='white') 
+
+
+
+windows()
+tsplot(Casos_Rionegro_ts[,22], ylab="Tasa mortalidad COVID 19", lwd=2, col="blue")
+lines(Casos_Barranquilla_ts[,22], lwd=2, col="red")
+lines(Casos_Santo_Tomas_ts[,22], lwd=2, col="grey")
+lines(Casos_Neiva_ts[,22], lwd=2, col="black")
+lines(Casos_Bucaramanga_ts[,22], lwd=2, col="chartreuse")
+lines(Casos_Puerto_Colombia_ts[,22], lwd=2, col="darkorange1")
+lines(Casos_Bogota_ts[,22], lwd=2, col="deeppink2")
+lines(Casos_Medellin_ts[,22], lwd=2, col="darkgreen")
+lines(Casos_Caldas_ts[,22], lwd=2, col="pink")
+legend('bottomright', col=c("blue","red","grey","black","chartreuse","darkorange1","deeppink2", "darkgreen", "pink" ), lwd=2, 
+       legend=c("Rionegro", "Barranquilla","Santo_Tomas","Neiva","Bucaramanga","Puerto_Colombia","Bogota" , "Medellin", "Caldas"), bg='white') 
+
+
+
+
+ggplot(Casos_Medellin, aes(x = year, y = IA_mes, fill = Nombre_municipio )) +
+  geom_line(stat = "identity") +
+  ggtitle("Top 10 municipios con más casos de COVID-19 por mes") +
+  xlab("Mes") +
+  ylab("Número de casos") +
+  scale_fill_discrete(name = "Municipio")
+
+
+
+
+
+
+Pre_B<- data%>% filter(Cod_DIVIPOLA=="5615" |
+                         Cod_DIVIPOLA=="8001"|
+                         Cod_DIVIPOLA=="68081" |
+                         Cod_DIVIPOLA=="8685" |
+                         Cod_DIVIPOLA=="41001" |
+                         Cod_DIVIPOLA=="68001" |
+                         Cod_DIVIPOLA=="8573" |
+                         Cod_DIVIPOLA=="11001" |
+                         Cod_DIVIPOLA=="5001" |
+                         Cod_DIVIPOLA=="5129")
+
+unique(Pre_B$Nombre_municipio)
+colnames(data)
+windows()
+
+ggplot(Pre_B, aes(x=year,y = IA_mes, group = Nombre_municipio), ylab="Muertes") +
+  geom_line(aes(linetype=Nombre_municipio,color=Nombre_municipio), size=1.2)+
+  labs(title="Casos acumulados",x="Fecha", y = "Casos")+
+  theme_classic()+
+  theme(text = element_text(size=25))
+
+
+
+Pre_B_1 <- Pre_B %>%
+  group_by(Cod_DIVIPOLA) %>%  filter(year==22)
+
+
+
+
+table1(~ factor (Aeropuerto_Nal)+ Altitud_media + Indice_Desempeño_Fiscal+ 
+         DIM_INSTITUCIONAL + IPM_MUN + poblacion_urbana+
+         Cobertura_bruta_educación + Tasa_mortalidadGEN + 
+         PRE_DM + PRE_ERC + cob_vacunacion_pob2021 +IA_Acum  + Superficie_Km2 +densidad_pob ,data=Pre_B_1, overall="Total",  
+       render.continuous=c(.="Mean (SD)", .="Median [Q1, Q3]", .="IQR", .="CV%"))
+
+
+municipios2=st_read ( "D:/MAESTRIA BIOESTADISITICA/TESIS/BASE DE DATOS/TESIS/fuentes/mpio2/Munpio.shp")
+municipios2$Cod_DIVIPOLA<-as.numeric(municipios2$MpCodigo)
+
+
+municipios2<-left_join(municipios2, Pre_B_1,  by="Cod_DIVIPOLA")
+municipios <- municipios %>%  filter(MpCodigo!= "88001")
+municipios <- municipios %>%  filter(MpCodigo!= "88564")
+
+plot1<-ggplot(data = municipios2) +
+  geom_sf(aes(fill = poblacion_urbana)) + 
+  scale_fill_gradient(low = "green",  high = "red", na.value = "NA") 
+
+plot2 <-ggplot(data = municipios2) +
+  geom_sf(aes(fill = densidad_pob)) + 
+  scale_fill_gradient(low = "green",  high = "red", na.value = "NA")
+
+
+
+plot3<- ggplot(data = municipios) +
+  geom_sf(aes(fill = Aeropuerto_Nal)) 
+
+plot4<-ggplot(data = municipios) +
+  geom_sf(aes(fill = Cobertura_bruta_educación)) + 
+  scale_fill_gradient(low = "green",  high = "red", na.value = "NA") 
+
+plot5<- ggplot(data = municipios) +
+  geom_sf(aes(fill = IPM_MUN)) + 
+  scale_fill_gradient(low = "green",  high = "red", na.value = "NA")
+
+plot6<- ggplot(data = municipios) +
+  geom_sf(aes(fill = Indice_Desempeño_Fiscal)) + 
+  scale_fill_gradient(low = "green",  high = "red", na.value = "NA") 
+
+
+plot7<- ggplot(data = municipios) +
+  geom_sf(aes(fill = DIM_INSTITUCIONAL)) + 
+  scale_fill_gradient(low = "green",  high = "red", na.value = "NA")
+
+plot8<- ggplot(data = municipios) +
+  geom_sf(aes(fill = Tasa_mortalidadGEN)) + 
+  scale_fill_gradient(low = "green",  high = "red", na.value = "NA")
+
+plot9<- ggplot(data = municipios) +
+  geom_sf(aes(fill = cob_vacunacion_pob2021)) + 
+  scale_fill_gradient(low = "green",  high = "red", na.value = "NA")
+
+plot10<-  ggplot(data = municipios) +
+  geom_sf(aes(fill = IA_Acum)) + 
+  scale_fill_gradient(low = "green",  high = "red", na.value = "NA") 
+
+plot11<- ggplot(data = municipios) +
+  geom_sf(aes(fill = PRE_DM)) + 
+  scale_fill_gradient(low = "green",  high = "red", na.value = "NA") 
+
+plot12<-  ggplot(data = municipios) +
+  geom_sf(aes(fill = PRE_ERC)) + 
+  scale_fill_gradient(low = "green",  high = "red", na.value = "NA") 
+
+
+plot13 <-ggplot(data = municipios) +
+  geom_sf(aes(fill = Altitud_media)) + 
+  scale_fill_gradient(low = "green",  high = "red", na.value = "NA")  
+
+
+plot14 <-ggplot(data = municipios) +
+  geom_sf(aes(fill = Superficie_Km2)) + 
+  scale_fill_gradient(low = "green",  high = "red", na.value = "NA")  
+
+windows()
+
+grid.arrange(plot1, plot2, ncol=2) #arranges plots within grid
+
