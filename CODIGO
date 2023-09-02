@@ -1446,3 +1446,58 @@ mod.intI_P_C <- inla(formula.intI_C,family="poisson",data=Casos_Covid_19_Combina
 ```
 
 
+
+
+
+#Replica 
+
+require(INLA)
+inla.setOption(scale.model.default=FALSE)
+library(readxl)
+require(gstat)
+require(geoR)
+require(fields)
+require(maptools)
+require(lattice)
+require(spdep)
+library(dplyr)
+
+Casos_Covid_19_Combinado <- read_excel("D:/MAESTRIA BIOESTADISITICA/TESIS/BASE DE DATOS/TESIS/data/Casos_Covid_19_Combinado.xlsx")
+
+municipios=st_read ( "D:/MAESTRIA BIOESTADISITICA/TESIS/BASE DE DATOS/TESIS/fuentes/mpio2/Munpio.shp")
+
+
+
+municipios$CodeM<-as.character(municipios$MpCodigo)
+
+
+
+
+
+muncol.gen <- readShapePoly("D:/MAESTRIA BIOESTADISITICA/TESIS/BASE DE DATOS/TESIS/fuentes/mpio2/Munpio.shp")
+# colombia 1.100
+
+
+muncol.gen$CodeM<-as.numeric (muncol.gen$MpCodigo)
+
+muncol.gen<-filter(muncol.gen$CodeM!= "27086")
+  
+27086,94663,88001,88564,91263,91405,91407,91430,91460,91530,91536,91669,91798,94343,94883,94884,94885,94886,94887,94888,97511,97777,97889
+
+temp <- poly2nb(muncol.gen)
+nb2INLA("muncol.graph", temp)
+muncol.adj <- paste(getwd(),"/muncol.graph",sep="")
+
+H <- inla.read.graph(filename="muncol.graph")
+image(inla.graph2matrix(H),xlab="",ylab="")
+
+Casos_Covid_19_Combinado
+
+formula <- IA_Acum ~ 1 + f(D_DEPTOR, model="bym",graph=muncol.adj, scale.model=TRUE,
+                     hyper=list(prec.unstruct=list(prior="loggamma",param=c(1,0.001)),
+                                prec.spatial=list(prior="loggamma",param=c(1,0.001))))
+
+Nareas <- length(Casos_Covid_19_Combinado[,1])
+
+
+
